@@ -60,6 +60,8 @@ Alternatively, change the `ARMA_CONFIG` variable to a file present in the `Confi
 | `SERVER_A2S_ADDRESS` | `0.0.0.0` | A2S query address. Set both address and port to enable; leave either empty to disable |
 | `SERVER_A2S_PORT` | `17777` | A2S query port (UDP) |
 
+**NOTE**: The full list of [Startup Parameters](https://community.bistudio.com/wiki/Arma_Reforger:Startup_Parameters#Hosting) for `ARMA_PARAMS` can be found on the Arma Reforger wiki.
+
 ### RCON
 
 RCON is activated by defining the `RCON_PASSWORD` variable.
