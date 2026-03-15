@@ -12,6 +12,11 @@ services:
       - ./reforger/configs:/reforger/Configs
       - ./reforger/profile:/home/profile
       - ./reforger/workshop:/reforger/workshop
+      # - ./persistence.json:/persistence.json  # Mount persistence JSON for databases/storages
     environment:
       - SERVER_PUBLIC_ADDRESS=public-ip
       - GAME_NAME=My Docker Reforger Server
+      # Persistence (disabled by default - set any to enable)
+      # - PERSISTENCE_AUTO_SAVE_INTERVAL=15
+      # - PERSISTENCE_HIVE_ID=0
+      # - PERSISTENCE_JSON_FILE_PATH=/persistence.json
