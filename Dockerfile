@@ -96,5 +96,6 @@ STOPSIGNAL SIGINT
 
 COPY *.py /
 COPY docker_default.json /
+COPY persistence_default.json /
 
 CMD ["python3","/launch.py"]

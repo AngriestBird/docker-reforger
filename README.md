@@ -104,6 +104,8 @@ RCON is activated by defining the `RCON_PASSWORD` variable.
 
 Persistence is **disabled by default** — the system works automatically for most use cases. Set any `PERSISTENCE_*` variable to enable the persistence config section.
 
+**NOTE**: ``-loadSessionSave`` must be enabled in order to load session saves. 
+
 | Variable | Default | Description |
 |---|---|---|
 | `PERSISTENCE_AUTO_SAVE_INTERVAL` | *(empty)* | Minutes between auto-saves (0–60). 0 disables auto-save. Server default is 10 |

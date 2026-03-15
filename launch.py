@@ -269,7 +269,7 @@ else:
                 for key in allowed_keys:
                     if key in persistence_json:
                         persistence[key] = persistence_json[key]
-        config["persistence"] = persistence
+        config["game"]["gameProperties"]["persistence"] = persistence
 
     f = open(CONFIG_GENERATED, "w")
     json.dump(config, f, indent=4)
