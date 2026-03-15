@@ -50,7 +50,7 @@ Alternatively, change the `ARMA_CONFIG` variable to a file present in the `Confi
 | `ARMA_CONFIG` | `docker_generated` | Config file name (without `.json`). Set to use a custom config from the `Configs` volume without ENV overrides |
 | `ARMA_PROFILE` | `/home/profile` | Server profile directory |
 | `ARMA_BINARY` | `./ArmaReforgerServer` | Path to the server binary |
-| `ARMA_PARAMS` | *(empty)* | Additional command-line parameters |
+| `ARMA_PARAMS` | *(empty)* | Additional command-line parameters (e.g. `-loadSessionSave` to resume a previous session) |
 | `ARMA_MAX_FPS` | `120` | Maximum server FPS |
 | `ARMA_WORKSHOP_DIR` | `/reforger/workshop` | Workshop / addons directory |
 | `SERVER_BIND_ADDRESS` | `0.0.0.0` | Address the server binds to |
