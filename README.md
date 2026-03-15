@@ -142,6 +142,10 @@ Example `persistence.json`:
 }
 ```
 
+**Documentation**:
+- [Persistence](https://community.bistudio.com/wiki/Arma_Reforger:Persistence_System) 
+- [Persistence Server Configuration](https://community.bistudio.com/wiki/Arma_Reforger:Server_Config#persistence)
+
 ### Mods
 
 Workshop mods can be defined in two ways. You can use both or either of those.
@@ -171,3 +175,8 @@ Path to a JSON file that contains array of mod objects.
   }
 ]
 ```
+
+### Documentation
+
+The full Server Configuration can be found [here](https://community.bistudio.com/wiki/Arma_Reforger:Server_Config).  
+The Dockerfile may not include every option that is currently available and may need updated and may require being updated for additional support of features.
