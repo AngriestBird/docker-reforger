@@ -1,7 +1,7 @@
 ---
 services:
   arma-reforger:
-    image: ghcr.io/acemod/arma-reforger:latest
+    image: arma-reforger-test:latest
     platform: linux/amd64
     container_name: arma-reforger
     ports:
@@ -12,7 +12,7 @@ services:
       - ./reforger/configs:/reforger/Configs
       - ./reforger/profile:/home/profile
       - ./reforger/workshop:/reforger/workshop
-      # - ./persistence.json:/persistence.json  # Mount persistence JSON for databases/storages
+      # - ./reforger/persistence.json:/persistence.json  # Mount persistence JSON for databases/storages
     environment:
       - SERVER_PUBLIC_ADDRESS=public-ip
       - GAME_NAME=My Docker Reforger Server
