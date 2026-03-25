@@ -29,10 +29,6 @@ RUN apt-get update \
     && \
     wget -qO- 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz' | tar zxf - -C /steamcmd
 
-RUN groupadd -r reforger && useradd -r -g reforger -d /home/profile -s /sbin/nologin reforger \
-    && mkdir -p /home/profile /reforger/Configs /reforger/workshop \
-    && chown -R reforger:reforger /steamcmd /home/profile /reforger
-
 ENV STEAM_USER=""
 ENV STEAM_PASSWORD=""
 ENV STEAM_APPID="1874900"
@@ -122,7 +118,5 @@ COPY persistence_default.json /
 
 HEALTHCHECK --interval=60s --timeout=10s --retries=3 \
     CMD python3 /healthcheck.py
-
-USER reforger
 
 CMD ["python3","/launch.py"]
