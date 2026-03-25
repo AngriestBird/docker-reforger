@@ -1,4 +1,4 @@
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
 LABEL maintainer="ACE Team - https://github.com/acemod"
 LABEL org.opencontainers.image.source=https://github.com/acemod/docker-reforger
@@ -14,7 +14,7 @@ RUN apt-get update \
         ca-certificates \
         libcurl4 \
         net-tools \
-        libssl1.1 \
+        libssl3 \
         wamerican \
     && \
     apt-get remove --purge -y \
@@ -28,6 +28,10 @@ RUN apt-get update \
     mkdir -p /steamcmd \
     && \
     wget -qO- 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz' | tar zxf - -C /steamcmd
+
+RUN groupadd -r reforger && useradd -r -g reforger -d /home/profile -s /sbin/nologin reforger \
+    && mkdir -p /home/profile /reforger/Configs /reforger/workshop \
+    && chown -R reforger:reforger /steamcmd /home/profile /reforger
 
 ENV STEAM_USER=""
 ENV STEAM_PASSWORD=""
@@ -53,6 +57,9 @@ ENV RCON_ADDRESS="0.0.0.0"
 ENV RCON_PORT=19999
 ENV RCON_PASSWORD=""
 ENV RCON_PERMISSION="admin"
+ENV RCON_MAX_CLIENTS=""
+ENV RCON_BLACKLIST=""
+ENV RCON_WHITELIST=""
 
 ENV GAME_NAME="Arma Reforger Docker Server"
 ENV GAME_PASSWORD=""
@@ -63,6 +70,9 @@ ENV GAME_SCENARIO_ID="{ECC61978EDCC2B5A}Missions/23_Campaign.conf"
 ENV GAME_MAX_PLAYERS=32
 ENV GAME_VISIBLE=true
 ENV GAME_SUPPORTED_PLATFORMS=PLATFORM_PC,PLATFORM_XBL,PLATFORM_PSN
+ENV GAME_CROSS_PLATFORM=""
+ENV GAME_MODS_REQUIRED_BY_DEFAULT=""
+ENV GAME_MISSION_HEADER_JSON_FILE_PATH=""
 ENV GAME_PROPS_BATTLEYE=true
 ENV GAME_PROPS_DISABLE_THIRD_PERSON=false
 ENV GAME_PROPS_FAST_VALIDATION=true
@@ -80,6 +90,17 @@ ENV PERSISTENCE_AUTO_SAVE_INTERVAL=""
 ENV PERSISTENCE_HIVE_ID=""
 ENV PERSISTENCE_JSON_FILE_PATH=""
 
+# Operating (disabled by default - set any to enable)
+ENV OPERATING_LOBBY_PLAYER_SYNCHRONISE=""
+ENV OPERATING_DISABLE_CRASH_REPORTER=""
+ENV OPERATING_DISABLE_NAVMESH_STREAMING=""
+ENV OPERATING_DISABLE_SERVER_SHUTDOWN=""
+ENV OPERATING_DISABLE_AI=""
+ENV OPERATING_PLAYER_SAVE_TIME=""
+ENV OPERATING_AI_LIMIT=""
+ENV OPERATING_SLOT_RESERVATION_TIMEOUT=""
+ENV OPERATING_JOIN_QUEUE_MAX_SIZE=""
+
 ENV SKIP_INSTALL=false
 
 WORKDIR /reforger
@@ -91,11 +112,17 @@ VOLUME /reforger/workshop
 
 EXPOSE 2001/udp
 EXPOSE 17777/udp
+EXPOSE 19999/udp
 
 STOPSIGNAL SIGINT
 
 COPY *.py /
 COPY docker_default.json /
 COPY persistence_default.json /
+
+HEALTHCHECK --interval=60s --timeout=10s --retries=3 \
+    CMD python3 /healthcheck.py
+
+USER reforger
 
 CMD ["python3","/launch.py"]

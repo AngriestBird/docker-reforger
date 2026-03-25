@@ -133,12 +133,27 @@ else:
         config["a2s"] = None
 
     if env_defined("RCON_ADDRESS") and env_defined("RCON_PORT"):
-        config["rcon"] = {
+        rcon = {
             "address": os.environ["RCON_ADDRESS"],
             "port": int(os.environ["RCON_PORT"]),
             "password": os.environ["RCON_PASSWORD"],
             "permission": os.environ["RCON_PERMISSION"],
         }
+        if env_defined("RCON_MAX_CLIENTS"):
+            rcon["maxClients"] = int(os.environ["RCON_MAX_CLIENTS"])
+        if env_defined("RCON_BLACKLIST"):
+            rcon["blacklist"] = [
+                cmd.strip()
+                for cmd in os.environ["RCON_BLACKLIST"].split(",")
+                if cmd.strip()
+            ]
+        if env_defined("RCON_WHITELIST"):
+            rcon["whitelist"] = [
+                cmd.strip()
+                for cmd in os.environ["RCON_WHITELIST"].split(",")
+                if cmd.strip()
+            ]
+        config["rcon"] = rcon
     else:
         config["rcon"] = None
 
@@ -166,6 +181,12 @@ else:
         config["game"]["supportedPlatforms"] = os.environ[
             "GAME_SUPPORTED_PLATFORMS"
         ].split(",")
+    if env_defined("GAME_CROSS_PLATFORM"):
+        config["game"]["crossPlatform"] = bool_str(os.environ["GAME_CROSS_PLATFORM"])
+    if env_defined("GAME_MODS_REQUIRED_BY_DEFAULT"):
+        config["game"]["modsRequiredByDefault"] = bool_str(
+            os.environ["GAME_MODS_REQUIRED_BY_DEFAULT"]
+        )
     if env_defined("GAME_PROPS_BATTLEYE"):
         config["game"]["gameProperties"]["battlEye"] = bool_str(
             os.environ["GAME_PROPS_BATTLEYE"]
@@ -203,6 +224,10 @@ else:
             os.environ["GAME_PROPS_VON_CAN_TRANSMIT_CROSS_FACTION"]
         )
 
+    if env_defined("GAME_MISSION_HEADER_JSON_FILE_PATH"):
+        with open(os.environ["GAME_MISSION_HEADER_JSON_FILE_PATH"]) as f:
+            config["game"]["gameProperties"]["missionHeader"] = json.load(f)
+
     # Since we want to keep ENVs as a single source of truth
     # we will regenerate the mod list in case any manual changes were made
     # also deletes the mod entries when GAME_MODS_IDS_LIST is empty
@@ -233,7 +258,7 @@ else:
     if env_defined("GAME_MODS_JSON_FILE_PATH"):
         with open(os.environ["GAME_MODS_JSON_FILE_PATH"]) as f:
             json_mods = json.load(f)
-            allowed_keys = ["modId", "name", "version"]
+            allowed_keys = ["modId", "name", "version", "required"]
             for provided_mod in json_mods:
                 assert (
                     "modId" in provided_mod
@@ -270,6 +295,45 @@ else:
                     if key in persistence_json:
                         persistence[key] = persistence_json[key]
         config["game"]["gameProperties"]["persistence"] = persistence
+
+    # Operating (only added when at least one operating ENV is defined)
+    operating = {}
+    if env_defined("OPERATING_LOBBY_PLAYER_SYNCHRONISE"):
+        operating["lobbyPlayerSynchronise"] = bool_str(
+            os.environ["OPERATING_LOBBY_PLAYER_SYNCHRONISE"]
+        )
+    if env_defined("OPERATING_DISABLE_CRASH_REPORTER"):
+        operating["disableCrashReporter"] = bool_str(
+            os.environ["OPERATING_DISABLE_CRASH_REPORTER"]
+        )
+    if env_defined("OPERATING_DISABLE_NAVMESH_STREAMING"):
+        val = os.environ["OPERATING_DISABLE_NAVMESH_STREAMING"]
+        if val.lower() == "all":
+            operating["disableNavmeshStreaming"] = []
+        else:
+            operating["disableNavmeshStreaming"] = [
+                name.strip() for name in val.split(",") if name.strip()
+            ]
+    if env_defined("OPERATING_DISABLE_SERVER_SHUTDOWN"):
+        operating["disableServerShutdown"] = bool_str(
+            os.environ["OPERATING_DISABLE_SERVER_SHUTDOWN"]
+        )
+    if env_defined("OPERATING_DISABLE_AI"):
+        operating["disableAI"] = bool_str(os.environ["OPERATING_DISABLE_AI"])
+    if env_defined("OPERATING_PLAYER_SAVE_TIME"):
+        operating["playerSaveTime"] = int(os.environ["OPERATING_PLAYER_SAVE_TIME"])
+    if env_defined("OPERATING_AI_LIMIT"):
+        operating["aiLimit"] = int(os.environ["OPERATING_AI_LIMIT"])
+    if env_defined("OPERATING_SLOT_RESERVATION_TIMEOUT"):
+        operating["slotReservationTimeout"] = int(
+            os.environ["OPERATING_SLOT_RESERVATION_TIMEOUT"]
+        )
+    if env_defined("OPERATING_JOIN_QUEUE_MAX_SIZE"):
+        operating["joinQueue"] = {
+            "maxSize": int(os.environ["OPERATING_JOIN_QUEUE_MAX_SIZE"])
+        }
+    if operating:
+        config["operating"] = operating
 
     f = open(CONFIG_GENERATED, "w")
     json.dump(config, f, indent=4)
