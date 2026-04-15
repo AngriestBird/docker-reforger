@@ -62,6 +62,8 @@ Alternatively, change the `ARMA_CONFIG` variable to a file present in the `Confi
 
 **NOTE**: The full list of [Startup Parameters](https://community.bistudio.com/wiki/Arma_Reforger:Startup_Parameters#Hosting) for `ARMA_PARAMS` can be found on the Arma Reforger wiki.
 
+**NOTE**: The container health check uses the active A2S settings when A2S is enabled. If A2S is disabled, the health check is skipped.
+
 ### RCON
 
 RCON is activated by defining the `RCON_PASSWORD` variable.
@@ -73,8 +75,8 @@ RCON is activated by defining the `RCON_PASSWORD` variable.
 | `RCON_PASSWORD` | *(empty)* | RCON password. Required for RCON to start. Must be at least 3 characters, no spaces |
 | `RCON_PERMISSION` | `admin` | [Permission](https://community.bistudio.com/wiki/Arma_Reforger:Server_Config#permission) level for all RCON clients |
 | `RCON_MAX_CLIENTS` | *(empty)* | Maximum number of concurrent RCON connections (1–16). Server default is 16 |
-| `RCON_BLACKLIST` | *(empty)* | Comma-separated list of commands excluded from execution |
-| `RCON_WHITELIST` | *(empty)* | Comma-separated list of allowed commands (if set, no other commands are allowed) |
+| `RCON_BLACKLIST` | *(empty)* | Comma-separated list of commands excluded from execution. Cannot be used together with `RCON_WHITELIST` |
+| `RCON_WHITELIST` | *(empty)* | Comma-separated list of allowed commands. Cannot be used together with `RCON_BLACKLIST` |
 
 ### Game
 
@@ -89,7 +91,7 @@ RCON is activated by defining the `RCON_PASSWORD` variable.
 | `GAME_VISIBLE` | `true` | Whether the server is visible in the server browser |
 | `GAME_SUPPORTED_PLATFORMS` | `PLATFORM_PC,PLATFORM_XBL,PLATFORM_PSN` | Comma-separated list of supported platforms |
 | `GAME_CROSS_PLATFORM` | *(empty)* | Accept all platforms if `true`. Recommended over `GAME_SUPPORTED_PLATFORMS` |
-| `GAME_MODS_REQUIRED_BY_DEFAULT` | *(empty)* | Override default `required` value for all mods. Server default is `true` |
+| `GAME_MODS_REQUIRED_BY_DEFAULT` | *(empty)* | Default `required` value for mods that do not explicitly set one. Server default is `true` |
 | `GAME_MISSION_HEADER_JSON_FILE_PATH` | *(empty)* | Path to a JSON file containing mission header overrides (see [Mission Header](#mission-header)) |
 | `GAME_MODS_IDS_LIST` | *(empty)* | Comma-separated mod IDs with optional version (e.g. `5965770215E93269=1.0.6,5965550F24A0C152`) |
 | `GAME_MODS_JSON_FILE_PATH` | *(empty)* | Path to a JSON file containing an array of mod objects (see [Mods](#mods)) |
@@ -205,7 +207,7 @@ Workshop mods can be defined in two ways. You can use both or either of those.
 
 #### GAME_MODS_IDS_LIST
 
-A comma separated list of IDs, with an optional version.
+A comma separated list of IDs, with an optional version. Entries generated from this list inherit `GAME_MODS_REQUIRED_BY_DEFAULT` when it is set.
 
 ```sh
 -e GAME_MODS_IDS_LIST="5965770215E93269=1.0.6,5965550F24A0C152"

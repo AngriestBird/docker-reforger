@@ -137,6 +137,9 @@ else:
         and env_defined("RCON_ADDRESS")
         and env_defined("RCON_PORT")
     ):
+        assert not (
+            env_defined("RCON_BLACKLIST") and env_defined("RCON_WHITELIST")
+        ), "RCON_BLACKLIST and RCON_WHITELIST cannot both be set"
         rcon = {
             "address": os.environ["RCON_ADDRESS"],
             "port": int(os.environ["RCON_PORT"]),
@@ -187,10 +190,10 @@ else:
         ].split(",")
     if env_defined("GAME_CROSS_PLATFORM"):
         config["game"]["crossPlatform"] = bool_str(os.environ["GAME_CROSS_PLATFORM"])
+    mods_required_by_default = None
     if env_defined("GAME_MODS_REQUIRED_BY_DEFAULT"):
-        config["game"]["modsRequiredByDefault"] = bool_str(
-            os.environ["GAME_MODS_REQUIRED_BY_DEFAULT"]
-        )
+        mods_required_by_default = bool_str(os.environ["GAME_MODS_REQUIRED_BY_DEFAULT"])
+        config["game"]["modsRequiredByDefault"] = mods_required_by_default
     if env_defined("GAME_PROPS_BATTLEYE"):
         config["game"]["gameProperties"]["battlEye"] = bool_str(
             os.environ["GAME_PROPS_BATTLEYE"]
@@ -257,6 +260,8 @@ else:
                     mod_details[1]
                 ), f"{mod} mod version does not match the pattern"
                 mod_config["version"] = mod_details[1]
+            if mods_required_by_default is not None:
+                mod_config["required"] = mods_required_by_default
             config_mod_ids.append(mod_id)
             config["game"]["mods"].append(mod_config)
     if env_defined("GAME_MODS_JSON_FILE_PATH"):
@@ -274,6 +279,8 @@ else:
                     for key in allowed_keys
                     if key in provided_mod
                 }  # Extract only valid config keys
+                if mods_required_by_default is not None and "required" not in valid_mod:
+                    valid_mod["required"] = mods_required_by_default
                 config_mod_ids.append(provided_mod["modId"])
                 config["game"]["mods"].append(valid_mod)
 

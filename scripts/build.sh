@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 echo "INFO: Building arma-reforger-test image..."
 

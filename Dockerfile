@@ -116,7 +116,7 @@ COPY *.py /
 COPY docker_default.json /
 COPY persistence_default.json /
 
-HEALTHCHECK --interval=60s --timeout=10s --retries=3 \
+HEALTHCHECK --interval=60s --timeout=10s --start-period=15m --retries=3 \
     CMD python3 /healthcheck.py
 
 CMD ["python3","/launch.py"]
