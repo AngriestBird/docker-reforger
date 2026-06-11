@@ -1,9 +1,8 @@
 import json
-import os
-import pytest
-import tempfile
 
-from launch_config import build_config, bool_str, env_defined
+import pytest
+
+from launch_config import bool_str, build_config, env_defined
 
 
 @pytest.fixture
@@ -186,10 +185,12 @@ def test_mods_ids_list_invalid_version(base_config):
 def test_mods_json_file(base_config, tmp_path):
     mods_file = tmp_path / "mods.json"
     mods_file.write_text(
-        json.dumps([
-            {"modId": "12345", "name": "Test Mod", "version": "1.0.0"},
-            {"modId": "67890", "required": False},
-        ])
+        json.dumps(
+            [
+                {"modId": "12345", "name": "Test Mod", "version": "1.0.0"},
+                {"modId": "67890", "required": False},
+            ]
+        )
     )
     env = {"GAME_MODS_JSON_FILE_PATH": str(mods_file)}
     config = build_config(env, base_config)
@@ -238,11 +239,13 @@ def test_persistence_config(base_config):
 def test_persistence_json_merge(base_config, tmp_path):
     persistence_file = tmp_path / "persistence.json"
     persistence_file.write_text(
-        json.dumps({
-            "databases": {"foo": "bar"},
-            "storages": {"baz": "qux"},
-            "ignored": "should not appear",
-        })
+        json.dumps(
+            {
+                "databases": {"foo": "bar"},
+                "storages": {"baz": "qux"},
+                "ignored": "should not appear",
+            }
+        )
     )
     env = {"PERSISTENCE_JSON_FILE_PATH": str(persistence_file)}
     config = build_config(env, base_config)

@@ -1,5 +1,4 @@
 import json
-import os
 import re
 
 
@@ -48,15 +47,11 @@ def build_config(env, base_config):
             rcon["maxClients"] = int(env["RCON_MAX_CLIENTS"])
         if env_defined(env, "RCON_BLACKLIST"):
             rcon["blacklist"] = [
-                cmd.strip()
-                for cmd in env["RCON_BLACKLIST"].split(",")
-                if cmd.strip()
+                cmd.strip() for cmd in env["RCON_BLACKLIST"].split(",") if cmd.strip()
             ]
         if env_defined(env, "RCON_WHITELIST"):
             rcon["whitelist"] = [
-                cmd.strip()
-                for cmd in env["RCON_WHITELIST"].split(",")
-                if cmd.strip()
+                cmd.strip() for cmd in env["RCON_WHITELIST"].split(",") if cmd.strip()
             ]
         config["rcon"] = rcon
     else:
@@ -79,9 +74,9 @@ def build_config(env, base_config):
     if env_defined(env, "GAME_VISIBLE"):
         config["game"]["visible"] = bool_str(env["GAME_VISIBLE"])
     if env_defined(env, "GAME_SUPPORTED_PLATFORMS"):
-        config["game"]["supportedPlatforms"] = env[
-            "GAME_SUPPORTED_PLATFORMS"
-        ].split(",")
+        config["game"]["supportedPlatforms"] = env["GAME_SUPPORTED_PLATFORMS"].split(
+            ","
+        )
     if env_defined(env, "GAME_CROSS_PLATFORM"):
         config["game"]["crossPlatform"] = bool_str(env["GAME_CROSS_PLATFORM"])
     mods_required_by_default = None
@@ -186,13 +181,9 @@ def build_config(env, base_config):
     if persistence_defined:
         persistence = {}
         if env_defined(env, "PERSISTENCE_AUTO_SAVE_INTERVAL"):
-            persistence["autoSaveInterval"] = int(
-                env["PERSISTENCE_AUTO_SAVE_INTERVAL"]
-            )
+            persistence["autoSaveInterval"] = int(env["PERSISTENCE_AUTO_SAVE_INTERVAL"])
         if env_defined(env, "PERSISTENCE_SAVE_RETENTION"):
-            persistence["saveRetention"] = int(
-                env["PERSISTENCE_SAVE_RETENTION"]
-            )
+            persistence["saveRetention"] = int(env["PERSISTENCE_SAVE_RETENTION"])
         if env_defined(env, "PERSISTENCE_LOAD_SESSION_SAVE"):
             persistence["loadSessionSave"] = bool_str(
                 env["PERSISTENCE_LOAD_SESSION_SAVE"]
@@ -234,9 +225,7 @@ def build_config(env, base_config):
             env["OPERATING_DISABLE_SERVER_SHUTDOWN"]
         )
     if env_defined(env, "OPERATING_DISABLE_AI"):
-        operating["disableAI"] = bool_str(
-            env["OPERATING_DISABLE_AI"]
-        )
+        operating["disableAI"] = bool_str(env["OPERATING_DISABLE_AI"])
     if env_defined(env, "OPERATING_PLAYER_SAVE_TIME"):
         operating["playerSaveTime"] = int(env["OPERATING_PLAYER_SAVE_TIME"])
     if env_defined(env, "OPERATING_AI_LIMIT"):
@@ -246,9 +235,7 @@ def build_config(env, base_config):
             env["OPERATING_SLOT_RESERVATION_TIMEOUT"]
         )
     if env_defined(env, "OPERATING_JOIN_QUEUE_MAX_SIZE"):
-        operating["joinQueue"] = {
-            "maxSize": int(env["OPERATING_JOIN_QUEUE_MAX_SIZE"])
-        }
+        operating["joinQueue"] = {"maxSize": int(env["OPERATING_JOIN_QUEUE_MAX_SIZE"])}
     if operating:
         config["operating"] = operating
 

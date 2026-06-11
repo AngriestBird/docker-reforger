@@ -93,9 +93,7 @@ if os.environ["SKIP_INSTALL"] in ["", "false"]:
         if env_defined(os.environ, "STEAM_BRANCH"):
             steamcmd.extend(["-beta", os.environ["STEAM_BRANCH"]])
         if env_defined(os.environ, "STEAM_BRANCH_PASSWORD"):
-            steamcmd.extend(
-                ["-betapassword", os.environ["STEAM_BRANCH_PASSWORD"]]
-            )
+            steamcmd.extend(["-betapassword", os.environ["STEAM_BRANCH_PASSWORD"]])
         steamcmd.extend(["validate", "+quit"])
         subprocess.call(steamcmd)
 
@@ -115,7 +113,6 @@ else:
     if not env_defined(os.environ, "GAME_PASSWORD_ADMIN"):
         config["game"]["passwordAdmin"] = random_passphrase()
         print(f"Admin password: {config['game']['passwordAdmin']}")
-
 
     with open(CONFIG_GENERATED, "w") as f:
         json.dump(config, f, indent=4)
