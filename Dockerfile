@@ -3,6 +3,7 @@ FROM debian:bookworm-slim
 LABEL maintainer="ACE Team - https://github.com/acemod"
 LABEL org.opencontainers.image.source=https://github.com/acemod/docker-reforger
 
+# SteamCMD requires root. Do not add a USER directive.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update \
     && \
@@ -83,6 +84,9 @@ ENV GAME_PROPS_VON_CAN_TRANSMIT_CROSS_FACTION=false
 
 # Persistence (disabled by default - set any to enable)
 ENV PERSISTENCE_AUTO_SAVE_INTERVAL=""
+ENV PERSISTENCE_SAVE_RETENTION=""
+ENV PERSISTENCE_LOAD_SESSION_SAVE=""
+ENV PERSISTENCE_KEEP_SESSION_SAVE=""
 ENV PERSISTENCE_HIVE_ID=""
 ENV PERSISTENCE_JSON_FILE_PATH=""
 
@@ -116,6 +120,7 @@ COPY *.py /
 COPY docker_default.json /
 COPY persistence_default.json /
 
+# start-period absorbs slow first-boot SteamCMD installs.
 HEALTHCHECK --interval=60s --timeout=10s --start-period=15m --retries=3 \
     CMD python3 /healthcheck.py
 

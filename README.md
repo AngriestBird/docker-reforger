@@ -2,6 +2,8 @@
 
 An Arma Reforger dedicated server. Updates to the latest version every time it is restarted.
 
+**NOTE**: Runs as **root** by design — SteamCMD requires root to install game files.
+
 ## Usage
 
 ### Docker CLI
@@ -119,6 +121,9 @@ Persistence is **disabled by default** — the system works automatically for mo
 | Variable | Default | Description |
 |---|---|---|
 | `PERSISTENCE_AUTO_SAVE_INTERVAL` | *(empty)* | Minutes between auto-saves (0–60). 0 disables auto-save. Server default is 10 |
+| `PERSISTENCE_SAVE_RETENTION` | *(empty)* | Number of save points to keep (1–128). Server default is 4 |
+| `PERSISTENCE_LOAD_SESSION_SAVE` | *(empty)* | Load the latest save point on startup. Server default is `false` |
+| `PERSISTENCE_KEEP_SESSION_SAVE` | *(empty)* | Keep save points after mission ends. Server default is `false` |
 | `PERSISTENCE_HIVE_ID` | *(empty)* | Hive identifier (0–16383). Used when multiple servers share a persistence database |
 | `PERSISTENCE_JSON_FILE_PATH` | *(empty)* | Path to a JSON file containing `databases` and/or `storages` objects (see below) |
 
