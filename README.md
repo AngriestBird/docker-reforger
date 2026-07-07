@@ -30,9 +30,9 @@ Simply check-out / copy [the provided docker-compose.yml](docker-compose.yml) an
 
 ### Configs
 
-By default the configs are generated from the ENV variables in the Dockerfile. After the first run the file can be expanded with additional options manually, but the fields will always be overwritten by the ENV variables.
+By default the container regenerates `Configs/docker_generated.json` from `/docker_default.json` on every startup. The environment variables are the source of truth for that generated config, including enabling and disabling optional sections like A2S, RCON, persistence, operating, and mission header overrides.
 
-Alternatively, change the `ARMA_CONFIG` variable to a file present in the `Configs` volume. It will be used without modification.
+If you want to hand-edit a config file and keep those changes, set `ARMA_CONFIG` to a different file in the `Configs` volume. That file is used as-is and is not modified by the container.
 
 ### Steam / Installation
 
@@ -40,7 +40,7 @@ Alternatively, change the `ARMA_CONFIG` variable to a file present in the `Confi
 |---|---|---|
 | `STEAM_USER` | *(empty)* | Steam username (anonymous login if empty) |
 | `STEAM_PASSWORD` | *(empty)* | Steam password |
-| `STEAM_APPID` | `1874900` | Steam app ID. Use `1890870` for the experimental server |
+| `STEAM_APPID` | `1874900` | Steam app ID. Use `1890870` for the experimental server. The container performs the required one-time Windows SteamCMD pass automatically before switching back to Linux installs |
 | `STEAM_BRANCH` | `public` | Steam branch to install from |
 | `STEAM_BRANCH_PASSWORD` | *(empty)* | Password for the Steam branch |
 | `SKIP_INSTALL` | `false` | Skip the SteamCMD install/update step |
@@ -166,6 +166,7 @@ Example `persistence.json`:
 ```
 
 **Documentation**:
+
 - [Persistence](https://community.bistudio.com/wiki/Arma_Reforger:Persistence_System)
 - [Persistence Server Configuration](https://community.bistudio.com/wiki/Arma_Reforger:Server_Config#persistence)
 
@@ -248,8 +249,14 @@ pip install pre-commit
 pre-commit install
 ```
 
-### Documentation
+#### Tests
 
+```sh
+pip install pytest
+pytest -q
+```
+
+### Documentation
 
 The full Server Configuration can be found [here](https://community.bistudio.com/wiki/Arma_Reforger:Server_Config).  
 The Dockerfile may not include every option that is currently available and may lag behind upstream for additional feature support.
