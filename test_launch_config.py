@@ -222,7 +222,9 @@ def test_mods_json_missing_modId(base_config, tmp_path):
 
 def test_mods_deduplication(base_config, tmp_path):
     """Mod IDs from GAME_MODS_IDS_LIST should skip duplicates from JSON."""
-    mods_file = write_json(tmp_path, "mods.json", [{"modId": "12345", "name": "From JSON"}])
+    mods_file = write_json(
+        tmp_path, "mods.json", [{"modId": "12345", "name": "From JSON"}]
+    )
     env = {
         "GAME_MODS_IDS_LIST": "12345",
         "GAME_MODS_JSON_FILE_PATH": str(mods_file),

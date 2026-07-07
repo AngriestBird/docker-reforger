@@ -2,7 +2,6 @@ import copy
 import json
 import re
 
-
 MOD_ID_LIST_RE = re.compile(r"^[A-Z\d,=.]+$")
 MOD_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 PERSISTENCE_ENV_KEYS = (
