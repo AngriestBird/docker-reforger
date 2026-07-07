@@ -1,7 +1,6 @@
 import json
 
 import pytest
-
 from launch_config import bool_str, build_config, env_defined, load_json_file
 
 
