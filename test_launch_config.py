@@ -1,14 +1,18 @@
 import json
 
 import pytest
-
-from launch_config import bool_str, build_config, env_defined
+from launch_config import bool_str, build_config, env_defined, load_json_file
 
 
 @pytest.fixture
 def base_config():
-    with open("docker_default.json") as f:
-        return json.load(f)
+    return load_json_file("docker_default.json")
+
+
+def write_json(tmp_path, name, content):
+    path = tmp_path / name
+    path.write_text(json.dumps(content))
+    return path
 
 
 def test_env_defined():
@@ -80,6 +84,16 @@ def test_rcon_config(base_config):
     assert config["rcon"]["maxClients"] == 10
 
 
+def test_rcon_permission_defaults_to_admin(base_config):
+    env = {
+        "RCON_ADDRESS": "0.0.0.0",
+        "RCON_PORT": "19999",
+        "RCON_PASSWORD": "secret",
+    }
+    config = build_config(env, base_config)
+    assert config["rcon"]["permission"] == "admin"
+
+
 def test_rcon_blacklist(base_config):
     env = {
         "RCON_ADDRESS": "0.0.0.0",
@@ -131,8 +145,8 @@ def test_game_overrides(base_config):
     assert config["game"]["password"] == "mypassword"
     assert config["game"]["scenarioId"] == "{FOO}Missions/01.conf"
     assert config["game"]["maxPlayers"] == 32
-    assert config["game"]["visible"] is False
-    assert config["game"]["crossPlatform"] is True
+    assert not config["game"]["visible"]
+    assert config["game"]["crossPlatform"]
 
 
 def test_game_admins(base_config):
@@ -150,7 +164,7 @@ def test_game_supported_platforms(base_config):
 def test_mods_required_by_default(base_config):
     env = {"GAME_MODS_REQUIRED_BY_DEFAULT": "true"}
     config = build_config(env, base_config)
-    assert config["game"]["modsRequiredByDefault"] is True
+    assert config["game"]["modsRequiredByDefault"]
 
 
 def test_mods_ids_list(base_config):
@@ -167,7 +181,7 @@ def test_mods_ids_list_with_required(base_config):
         "GAME_MODS_REQUIRED_BY_DEFAULT": "true",
     }
     config = build_config(env, base_config)
-    assert config["game"]["mods"][0]["required"] is True
+    assert config["game"]["mods"][0]["required"]
 
 
 def test_mods_ids_list_invalid_chars(base_config):
@@ -183,25 +197,23 @@ def test_mods_ids_list_invalid_version(base_config):
 
 
 def test_mods_json_file(base_config, tmp_path):
-    mods_file = tmp_path / "mods.json"
-    mods_file.write_text(
-        json.dumps(
-            [
-                {"modId": "12345", "name": "Test Mod", "version": "1.0.0"},
-                {"modId": "67890", "required": False},
-            ]
-        )
+    mods_file = write_json(
+        tmp_path,
+        "mods.json",
+        [
+            {"modId": "12345", "name": "Test Mod", "version": "1.0.0"},
+            {"modId": "67890", "required": False},
+        ],
     )
     env = {"GAME_MODS_JSON_FILE_PATH": str(mods_file)}
     config = build_config(env, base_config)
     assert len(config["game"]["mods"]) == 2
     assert config["game"]["mods"][0]["name"] == "Test Mod"
-    assert config["game"]["mods"][1]["required"] is False
+    assert not config["game"]["mods"][1]["required"]
 
 
 def test_mods_json_missing_modId(base_config, tmp_path):
-    mods_file = tmp_path / "mods.json"
-    mods_file.write_text(json.dumps([{"name": "Bad Mod"}]))
+    mods_file = write_json(tmp_path, "mods.json", [{"name": "Bad Mod"}])
     env = {"GAME_MODS_JSON_FILE_PATH": str(mods_file)}
     with pytest.raises(AssertionError, match="does not contain modId"):
         build_config(env, base_config)
@@ -209,8 +221,9 @@ def test_mods_json_missing_modId(base_config, tmp_path):
 
 def test_mods_deduplication(base_config, tmp_path):
     """Mod IDs from GAME_MODS_IDS_LIST should skip duplicates from JSON."""
-    mods_file = tmp_path / "mods.json"
-    mods_file.write_text(json.dumps([{"modId": "12345", "name": "From JSON"}]))
+    mods_file = write_json(
+        tmp_path, "mods.json", [{"modId": "12345", "name": "From JSON"}]
+    )
     env = {
         "GAME_MODS_IDS_LIST": "12345",
         "GAME_MODS_JSON_FILE_PATH": str(mods_file),
@@ -231,21 +244,20 @@ def test_persistence_config(base_config):
     p = config["game"]["gameProperties"]["persistence"]
     assert p["autoSaveInterval"] == 300
     assert p["saveRetention"] == 5
-    assert p["loadSessionSave"] is True
-    assert p["keepSessionSave"] is False
+    assert p["loadSessionSave"]
+    assert not p["keepSessionSave"]
     assert p["hiveId"] == 123
 
 
 def test_persistence_json_merge(base_config, tmp_path):
-    persistence_file = tmp_path / "persistence.json"
-    persistence_file.write_text(
-        json.dumps(
-            {
-                "databases": {"foo": "bar"},
-                "storages": {"baz": "qux"},
-                "ignored": "should not appear",
-            }
-        )
+    persistence_file = write_json(
+        tmp_path,
+        "persistence.json",
+        {
+            "databases": {"foo": "bar"},
+            "storages": {"baz": "qux"},
+            "ignored": "should not appear",
+        },
     )
     env = {"PERSISTENCE_JSON_FILE_PATH": str(persistence_file)}
     config = build_config(env, base_config)
@@ -262,6 +274,12 @@ def test_persistence_not_set_when_empty(base_config):
     assert "persistence" not in config["game"]["gameProperties"]
 
 
+def test_persistence_removed_when_env_cleared(base_config):
+    previous = build_config({"PERSISTENCE_HIVE_ID": "123"}, base_config)
+    config = build_config({}, previous)
+    assert "persistence" not in config["game"]["gameProperties"]
+
+
 def test_operating_config(base_config):
     env = {
         "OPERATING_LOBBY_PLAYER_SYNCHRONISE": "true",
@@ -275,10 +293,10 @@ def test_operating_config(base_config):
     }
     config = build_config(env, base_config)
     o = config["operating"]
-    assert o["lobbyPlayerSynchronise"] is True
-    assert o["disableCrashReporter"] is False
-    assert o["disableServerShutdown"] is True
-    assert o["disableAI"] is False
+    assert o["lobbyPlayerSynchronise"]
+    assert not o["disableCrashReporter"]
+    assert o["disableServerShutdown"]
+    assert not o["disableAI"]
     assert o["playerSaveTime"] == 120
     assert o["aiLimit"] == 50
     assert o["slotReservationTimeout"] == 60
@@ -304,12 +322,26 @@ def test_operating_not_set_when_empty(base_config):
     assert "operating" not in config
 
 
+def test_operating_removed_when_env_cleared(base_config):
+    previous = build_config({"OPERATING_AI_LIMIT": "50"}, base_config)
+    config = build_config({}, previous)
+    assert "operating" not in config
+
+
 def test_mission_header_json(base_config, tmp_path):
-    mission_file = tmp_path / "mission.json"
-    mission_file.write_text(json.dumps({"myKey": "myValue"}))
+    mission_file = write_json(tmp_path, "mission.json", {"myKey": "myValue"})
     env = {"GAME_MISSION_HEADER_JSON_FILE_PATH": str(mission_file)}
     config = build_config(env, base_config)
     assert config["game"]["gameProperties"]["missionHeader"] == {"myKey": "myValue"}
+
+
+def test_mission_header_reset_when_env_cleared(base_config, tmp_path):
+    mission_file = write_json(tmp_path, "mission.json", {"myKey": "myValue"})
+    previous = build_config(
+        {"GAME_MISSION_HEADER_JSON_FILE_PATH": str(mission_file)}, base_config
+    )
+    config = build_config({}, previous)
+    assert config["game"]["gameProperties"]["missionHeader"] == {}
 
 
 def test_game_properties_booleans(base_config):
@@ -323,12 +355,12 @@ def test_game_properties_booleans(base_config):
     }
     config = build_config(env, base_config)
     gp = config["game"]["gameProperties"]
-    assert gp["battlEye"] is False
-    assert gp["disableThirdPerson"] is True
-    assert gp["fastValidation"] is False
-    assert gp["VONDisableUI"] is True
-    assert gp["VONDisableDirectSpeechUI"] is True
-    assert gp["VONCanTransmitCrossFaction"] is True
+    assert not gp["battlEye"]
+    assert gp["disableThirdPerson"]
+    assert not gp["fastValidation"]
+    assert gp["VONDisableUI"]
+    assert gp["VONDisableDirectSpeechUI"]
+    assert gp["VONCanTransmitCrossFaction"]
 
 
 def test_game_properties_integers(base_config):
