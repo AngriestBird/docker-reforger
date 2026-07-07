@@ -11,7 +11,7 @@ import socket
 import sys
 from pathlib import Path
 
-A2S_INFO_REQUEST = b"\xFF\xFF\xFF\xFF\x54Source Engine Query\x00"
+A2S_INFO_REQUEST = b"\xff\xff\xff\xff\x54Source Engine Query\x00"
 CONFIG_GENERATED = Path("/reforger/Configs/docker_generated.json")
 CONFIG_DIR = Path("/reforger/Configs")
 TIMEOUT_SECONDS = 5
