@@ -119,10 +119,11 @@ print(shlex.join(launch), flush=True)
 proc = subprocess.Popen(launch)
 
 try:
-    sys.exit(proc.wait())
-except KeyboardInterrupt:
-    proc.send_signal(signal.SIGINT)
-    sys.exit(proc.wait())
+    try:
+        sys.exit(proc.wait())
+    except KeyboardInterrupt:
+        proc.send_signal(signal.SIGINT)
+        sys.exit(proc.wait())
 except SystemExit:
     raise
 except BaseException:
