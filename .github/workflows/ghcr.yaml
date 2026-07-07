@@ -72,7 +72,9 @@ jobs:
       - name: Load Image
         run: docker load < image.tar.gz
       - name: Set image tag
-        run: echo "IMAGE_TAG=ghcr.io/${OWNER,,}/arma-reforger:latest" >> "$GITHUB_ENV"
+        run: >-
+          echo "IMAGE_TAG=ghcr.io/${OWNER,,}/arma-reforger:latest"
+          >> "$GITHUB_ENV"
         env:
           OWNER: ${{ github.repository_owner }}
       - name: Tag Image
