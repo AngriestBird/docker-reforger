@@ -66,5 +66,6 @@ try:
     if not a2s:
         sys.exit(0)
     sys.exit(0 if probe_server(a2s["address"], a2s["port"]) else 1)
-except Exception:
+except Exception as err:
+    print(f"Health check failed: {err}", file=sys.stderr)
     sys.exit(1)

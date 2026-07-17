@@ -124,7 +124,9 @@ COPY persistence_default.json /
 
 # start-period gives the first SteamCMD install and server boot time to finish
 # before failing checks count against retries. Bump it if your install is slower.
-HEALTHCHECK --interval=60s --timeout=10s --start-period=15m --retries=3 \
+# timeout has headroom for healthcheck.py probing several UDP endpoints (IPv6 +
+# IPv4) at 5s each when the server is down, so Docker does not kill the probe.
+HEALTHCHECK --interval=60s --timeout=30s --start-period=15m --retries=3 \
     CMD python3 /healthcheck.py
 
 CMD ["python3","/launch.py"]

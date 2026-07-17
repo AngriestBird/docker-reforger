@@ -1,4 +1,5 @@
 #!/bin/sh
+set -eu
 
 echo "INFO: Building arma-reforger-test image..."
 

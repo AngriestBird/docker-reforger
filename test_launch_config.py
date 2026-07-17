@@ -127,7 +127,7 @@ def test_rcon_blacklist_and_whitelist_fails(base_config):
         "RCON_BLACKLIST": "kick",
         "RCON_WHITELIST": "help",
     }
-    with pytest.raises(AssertionError, match="cannot both be set"):
+    with pytest.raises(ValueError, match="cannot both be set"):
         build_config(env, base_config)
 
 
@@ -186,13 +186,13 @@ def test_mods_ids_list_with_required(base_config):
 
 def test_mods_ids_list_invalid_chars(base_config):
     env = {"GAME_MODS_IDS_LIST": "12345=1.0.0;bad"}
-    with pytest.raises(AssertionError, match="Illegal characters"):
+    with pytest.raises(ValueError, match="Illegal characters"):
         build_config(env, base_config)
 
 
 def test_mods_ids_list_invalid_version(base_config):
     env = {"GAME_MODS_IDS_LIST": "12345=BADVERSION"}
-    with pytest.raises(AssertionError, match="version does not match"):
+    with pytest.raises(ValueError, match="version does not match"):
         build_config(env, base_config)
 
 
@@ -215,7 +215,7 @@ def test_mods_json_file(base_config, tmp_path):
 def test_mods_json_missing_modId(base_config, tmp_path):
     mods_file = write_json(tmp_path, "mods.json", [{"name": "Bad Mod"}])
     env = {"GAME_MODS_JSON_FILE_PATH": str(mods_file)}
-    with pytest.raises(AssertionError, match="does not contain modId"):
+    with pytest.raises(ValueError, match="does not contain modId"):
         build_config(env, base_config)
 
 

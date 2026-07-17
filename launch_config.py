@@ -65,9 +65,8 @@ def build_config(env, base_config):
         and env_defined(env, "RCON_ADDRESS")
         and env_defined(env, "RCON_PORT")
     ):
-        assert not (
-            env_defined(env, "RCON_BLACKLIST") and env_defined(env, "RCON_WHITELIST")
-        ), "RCON_BLACKLIST and RCON_WHITELIST cannot both be set"
+        if env_defined(env, "RCON_BLACKLIST") and env_defined(env, "RCON_WHITELIST"):
+            raise ValueError("RCON_BLACKLIST and RCON_WHITELIST cannot both be set")
         rcon = {
             "address": env["RCON_ADDRESS"],
             "port": parse_int(env, "RCON_PORT"),
@@ -101,8 +100,8 @@ def build_config(env, base_config):
     if env_defined(env, "GAME_VISIBLE"):
         config["game"]["visible"] = bool_str(env["GAME_VISIBLE"])
     if env_defined(env, "GAME_SUPPORTED_PLATFORMS"):
-        config["game"]["supportedPlatforms"] = env["GAME_SUPPORTED_PLATFORMS"].split(
-            ","
+        config["game"]["supportedPlatforms"] = split_csv(
+            env["GAME_SUPPORTED_PLATFORMS"]
         )
     if env_defined(env, "GAME_CROSS_PLATFORM"):
         config["game"]["crossPlatform"] = bool_str(env["GAME_CROSS_PLATFORM"])
@@ -157,20 +156,19 @@ def build_config(env, base_config):
     config["game"]["mods"] = []
     config_mod_ids = []
     if env_defined(env, "GAME_MODS_IDS_LIST"):
-        assert MOD_ID_LIST_RE.match(
-            env["GAME_MODS_IDS_LIST"]
-        ), "Illegal characters in GAME_MODS_IDS_LIST env"
+        if not MOD_ID_LIST_RE.match(env["GAME_MODS_IDS_LIST"]):
+            raise ValueError("Illegal characters in GAME_MODS_IDS_LIST env")
         for mod in split_csv(env["GAME_MODS_IDS_LIST"]):
             mod_details = mod.split("=")
-            assert 0 < len(mod_details) < 3, f"{mod} mod not defined properly"
+            if not 0 < len(mod_details) < 3:
+                raise ValueError(f"{mod} mod not defined properly")
             mod_id = mod_details[0]
             if mod_id in config_mod_ids:
                 continue
             mod_config = {"modId": mod_id}
             if len(mod_details) == 2:
-                assert MOD_VERSION_RE.match(
-                    mod_details[1]
-                ), f"{mod} mod version does not match the pattern"
+                if not MOD_VERSION_RE.match(mod_details[1]):
+                    raise ValueError(f"{mod} mod version does not match the pattern")
                 mod_config["version"] = mod_details[1]
             if mods_required_by_default is not None:
                 mod_config["required"] = mods_required_by_default
@@ -180,9 +178,10 @@ def build_config(env, base_config):
         json_mods = load_json_file(env["GAME_MODS_JSON_FILE_PATH"])
         allowed_keys = ["modId", "name", "version", "required"]
         for provided_mod in json_mods:
-            assert (
-                "modId" in provided_mod
-            ), f"Entry in GAME_MODS_JSON_FILE_PATH file does not contain modId: {provided_mod}"
+            if "modId" not in provided_mod:
+                raise ValueError(
+                    f"Entry in GAME_MODS_JSON_FILE_PATH file does not contain modId: {provided_mod}"
+                )
             if provided_mod["modId"] in config_mod_ids:
                 continue
             valid_mod = {
