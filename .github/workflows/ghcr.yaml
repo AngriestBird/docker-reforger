@@ -46,7 +46,8 @@ jobs:
           mkdir -p "$workshop/$mod_id" "$configs"
           printf '%s\n' \
             '{"id":"1111111111111111","name":"Stale Mod",' \
-            '"revision":{"version":"1.0.0","dependencies":[],"downloaded":true}}' \
+            '"revision":{"version":"1.0.0","dependencies":[],' \
+            '"downloaded":true}}' \
             > "$workshop/$mod_id/ServerData.json"
           docker run --rm \
             -e ARMA_BINARY=/bin/true \
@@ -59,7 +60,8 @@ jobs:
           mkdir -p "$workshop/$mod_id"
           printf '%s\n' \
             '{"id":"1111111111111111","name":"Stale Mod",' \
-            '"revision":{"version":"1.0.0","dependencies":[],"downloaded":true}}' \
+            '"revision":{"version":"1.0.0","dependencies":[],' \
+            '"downloaded":true}}' \
             > "$workshop/$mod_id/ServerData.json"
           printf '%s\n' '{"game":{"name":"Vanilla"}}' \
             > "$configs/custom.json"

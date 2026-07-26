@@ -4,6 +4,7 @@ LABEL maintainer="ACE Team - https://github.com/acemod"
 LABEL org.opencontainers.image.source=https://github.com/acemod/docker-reforger
 
 # SteamCMD requires root. Do not add a USER directive.
+# checkov:skip=CKV_DOCKER_3: SteamCMD and the Arma server require root; see .hadolint.yaml DL3002
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update \
     && \

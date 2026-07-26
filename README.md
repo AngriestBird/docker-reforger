@@ -212,7 +212,13 @@ Example `mission_header.json`:
 
 Workshop mods can be defined in two ways. You can use both or either of those.
 
-Set `GAME_MODS_AUTO_PRUNE=true` to remove unused mods from `ARMA_WORKSHOP_DIR` before the server starts. Pruning reads each mod's `ServerData.json`, keeps configured mods and their installed dependency tree, and removes only validated mod directories. Invalid or unrelated directories are left alone. If a configured mod or dependency has invalid metadata, startup stops without pruning. Interrupted pruning resumes on the next startup.
+Set `GAME_MODS_AUTO_PRUNE=true` to remove unused mods from
+`ARMA_WORKSHOP_DIR` before the server starts. Pruning reads each mod's
+`ServerData.json`, keeps configured mods and their installed dependency
+tree, and removes only validated mod directories. Invalid or unrelated
+directories are left alone. If a configured mod or dependency has invalid
+metadata, startup stops without pruning. Interrupted pruning resumes on the
+next startup.
 
 #### GAME_MODS_IDS_LIST
 

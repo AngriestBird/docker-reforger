@@ -23,7 +23,7 @@ def random_passphrase():
     passphrase = "'"
     while "'" in passphrase:
         try:
-            with open("/usr/share/dict/american-english") as f:
+            with open("/usr/share/dict/american-english", encoding="utf-8") as f:
                 words = f.readlines()
         except OSError as err:
             raise SystemExit(f"Failed to read word list: {err}") from err
@@ -52,7 +52,7 @@ def build_steamcmd_command(force_platform=None):
 
 def build_generated_config():
     try:
-        with open(DEFAULT_CONFIG) as f:
+        with open(DEFAULT_CONFIG, encoding="utf-8") as f:
             config = json.load(f)
     except (OSError, ValueError) as err:
         raise SystemExit(f"Failed to load {DEFAULT_CONFIG}: {err}") from err
@@ -64,7 +64,7 @@ def build_generated_config():
         print(f"Admin password: {config['game']['passwordAdmin']}")
 
     try:
-        with open(CONFIG_GENERATED, "w") as f:
+        with open(CONFIG_GENERATED, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=4)
     except OSError as err:
         raise SystemExit(f"Failed to write {CONFIG_GENERATED}: {err}") from err
@@ -93,20 +93,20 @@ if os.environ["SKIP_INSTALL"] in ["", "false"]:
         subprocess.call(build_steamcmd_command())
 
 if os.environ["ARMA_CONFIG"] != "docker_generated":
-    config_path = f"/reforger/Configs/{os.environ['ARMA_CONFIG']}"
+    CONFIG_PATH = f"/reforger/Configs/{os.environ['ARMA_CONFIG']}"
 else:
-    config_path = build_generated_config()
+    CONFIG_PATH = build_generated_config()
 
 if bool_str(os.environ["GAME_MODS_AUTO_PRUNE"]):
     try:
-        prune_mods(config_path, os.environ["ARMA_WORKSHOP_DIR"])
-    except (OSError, ValueError) as err:
-        raise SystemExit(f"Failed to prune mods: {err}") from err
+        prune_mods(CONFIG_PATH, os.environ["ARMA_WORKSHOP_DIR"])
+    except (OSError, ValueError) as prune_err:
+        raise SystemExit(f"Failed to prune mods: {prune_err}") from prune_err
 
 launch = [
     os.environ["ARMA_BINARY"],
     "-config",
-    config_path,
+    CONFIG_PATH,
     "-backendlog",
     "-nothrow",
     "-maxFPS",
@@ -122,16 +122,15 @@ launch = [
 
 print(shlex.join(launch), flush=True)
 
-proc = subprocess.Popen(launch)
-
-try:
+with subprocess.Popen(launch) as proc:
     try:
-        exit_code = proc.wait()
-    except KeyboardInterrupt:
-        proc.send_signal(signal.SIGINT)
-        exit_code = proc.wait()
-except BaseException:
-    proc.kill()
-    raise
+        try:
+            EXIT_CODE = proc.wait()
+        except KeyboardInterrupt:
+            proc.send_signal(signal.SIGINT)
+            EXIT_CODE = proc.wait()
+    except BaseException:
+        proc.kill()
+        raise
 
-sys.exit(exit_code)
+sys.exit(EXIT_CODE)

@@ -2,8 +2,9 @@ import json
 import os
 import sys
 
-import launch_config
 import pytest
+
+import launch_config
 from launch_config import prune_mods
 
 MOD_A = "1111111111111111"
@@ -81,7 +82,7 @@ def test_skips_directories_without_valid_server_data(tmp_path):
     unrelated.mkdir()
     config = write_config(tmp_path, [])
 
-    assert prune_mods(config, workshop) == []
+    assert not prune_mods(config, workshop)
     assert invalid.exists()
     assert unrelated.exists()
 
@@ -96,7 +97,7 @@ def test_skips_mod_with_non_string_metadata_id(tmp_path):
     server_data_path.write_text(json.dumps(server_data))
     config = write_config(tmp_path, [])
 
-    assert prune_mods(config, workshop) == []
+    assert not prune_mods(config, workshop)
     assert invalid.exists()
 
 
@@ -111,7 +112,7 @@ def test_skips_symlinked_server_data(tmp_path):
     server_data_path.symlink_to(outside_metadata)
     config = write_config(tmp_path, [])
 
-    assert prune_mods(config, workshop) == []
+    assert not prune_mods(config, workshop)
     assert invalid.exists()
     assert outside_metadata.exists()
 
@@ -126,7 +127,7 @@ def test_skips_oversized_server_data(tmp_path):
     )
     config = write_config(tmp_path, [])
 
-    assert prune_mods(config, workshop) == []
+    assert not prune_mods(config, workshop)
     assert invalid.exists()
 
 
@@ -232,7 +233,7 @@ def test_does_not_follow_symlinked_mod_directories(tmp_path):
     (workshop / MOD_A).symlink_to(outside_mod, target_is_directory=True)
     config = write_config(tmp_path, [])
 
-    assert prune_mods(config, workshop) == []
+    assert not prune_mods(config, workshop)
     assert outside_mod.exists()
 
 
@@ -338,7 +339,7 @@ def test_deletion_failure_is_retried_from_quarantine(tmp_path, monkeypatch):
     )
 
     monkeypatch.setattr(launch_config, "remove_directory_tree", remove_tree)
-    assert prune_mods(config, workshop) == []
+    assert not prune_mods(config, workshop)
     assert not any(
         path.name.startswith(launch_config.PRUNE_QUARANTINE_PREFIX)
         for path in workshop.iterdir()
@@ -377,7 +378,7 @@ def test_interrupted_quarantine_is_recovered(tmp_path):
 
     assert not stale.exists()
     assert (workshop / quarantine_name).exists()
-    assert prune_mods(config, workshop) == []
+    assert not prune_mods(config, workshop)
     assert not stale.exists()
     assert not (workshop / quarantine_name).exists()
 

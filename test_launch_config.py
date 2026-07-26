@@ -1,15 +1,11 @@
 import json
 
 import pytest
-from launch_config import bool_str, build_config, env_defined, load_json_file
+
+from launch_config import bool_str, build_config, env_defined
 
 MOD_A = "1111111111111111"
 MOD_B = "2222222222222222"
-
-
-@pytest.fixture
-def base_config():
-    return load_json_file("docker_default.json")
 
 
 def write_json(tmp_path, name, content):
@@ -221,7 +217,7 @@ def test_mods_json_file(base_config, tmp_path):
     assert not config["game"]["mods"][1]["required"]
 
 
-def test_mods_json_missing_modId(base_config, tmp_path):
+def test_mods_json_missing_modid(base_config, tmp_path):
     mods_file = write_json(tmp_path, "mods.json", [{"name": "Bad Mod"}])
     env = {"GAME_MODS_JSON_FILE_PATH": str(mods_file)}
     with pytest.raises(ValueError, match="does not contain modId"):
