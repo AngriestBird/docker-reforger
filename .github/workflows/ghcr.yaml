@@ -3,6 +3,10 @@ name: Publish Docker
 
 on:
   push:
+  pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -10,12 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build Image
         run: docker build . -t arma-reforger
       - name: Save Image
@@ -39,6 +37,41 @@ jobs:
           name: image
       - name: Load Image
         run: docker load < image.tar.gz
+      - name: Test Mod Pruning
+        run: |
+          scratch="$(mktemp -d)"
+          workshop="$scratch/workshop"
+          configs="$scratch/configs"
+          mod_id="1111111111111111"
+          mkdir -p "$workshop/$mod_id" "$configs"
+          printf '%s\n' \
+            '{"id":"1111111111111111","name":"Stale Mod",' \
+            '"revision":{"version":"1.0.0","dependencies":[],"downloaded":true}}' \
+            > "$workshop/$mod_id/ServerData.json"
+          docker run --rm \
+            -e ARMA_BINARY=/bin/true \
+            -e GAME_MODS_AUTO_PRUNE=true \
+            -e SKIP_INSTALL=true \
+            -v "$workshop:/reforger/workshop" \
+            arma-reforger
+          test ! -e "$workshop/$mod_id"
+
+          mkdir -p "$workshop/$mod_id"
+          printf '%s\n' \
+            '{"id":"1111111111111111","name":"Stale Mod",' \
+            '"revision":{"version":"1.0.0","dependencies":[],"downloaded":true}}' \
+            > "$workshop/$mod_id/ServerData.json"
+          printf '%s\n' '{"game":{"name":"Vanilla"}}' \
+            > "$configs/custom.json"
+          docker run --rm \
+            -e ARMA_BINARY=/bin/true \
+            -e ARMA_CONFIG=custom.json \
+            -e GAME_MODS_AUTO_PRUNE=true \
+            -e SKIP_INSTALL=true \
+            -v "$configs:/reforger/Configs" \
+            -v "$workshop:/reforger/workshop" \
+            arma-reforger
+          test ! -e "$workshop/$mod_id"
       - name: Run Image
         run: >
           docker run -d
@@ -58,7 +91,10 @@ jobs:
     needs:
       - build
       - test
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Login to GHCR
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121

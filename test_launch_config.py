@@ -3,6 +3,9 @@ import json
 import pytest
 from launch_config import bool_str, build_config, env_defined, load_json_file
 
+MOD_A = "1111111111111111"
+MOD_B = "2222222222222222"
+
 
 @pytest.fixture
 def base_config():
@@ -168,16 +171,16 @@ def test_mods_required_by_default(base_config):
 
 
 def test_mods_ids_list(base_config):
-    env = {"GAME_MODS_IDS_LIST": "12345=1.0.0,67890"}
+    env = {"GAME_MODS_IDS_LIST": f"{MOD_A}=1.0.0,{MOD_B}"}
     config = build_config(env, base_config)
     assert len(config["game"]["mods"]) == 2
-    assert config["game"]["mods"][0] == {"modId": "12345", "version": "1.0.0"}
-    assert config["game"]["mods"][1] == {"modId": "67890"}
+    assert config["game"]["mods"][0] == {"modId": MOD_A, "version": "1.0.0"}
+    assert config["game"]["mods"][1] == {"modId": MOD_B}
 
 
 def test_mods_ids_list_with_required(base_config):
     env = {
-        "GAME_MODS_IDS_LIST": "12345=1.0.0",
+        "GAME_MODS_IDS_LIST": f"{MOD_A}=1.0.0",
         "GAME_MODS_REQUIRED_BY_DEFAULT": "true",
     }
     config = build_config(env, base_config)
@@ -185,13 +188,19 @@ def test_mods_ids_list_with_required(base_config):
 
 
 def test_mods_ids_list_invalid_chars(base_config):
-    env = {"GAME_MODS_IDS_LIST": "12345=1.0.0;bad"}
+    env = {"GAME_MODS_IDS_LIST": f"{MOD_A}=1.0.0;bad"}
     with pytest.raises(ValueError, match="Illegal characters"):
         build_config(env, base_config)
 
 
+def test_mods_ids_list_invalid_id(base_config):
+    env = {"GAME_MODS_IDS_LIST": "12345"}
+    with pytest.raises(ValueError, match="Invalid mod ID"):
+        build_config(env, base_config)
+
+
 def test_mods_ids_list_invalid_version(base_config):
-    env = {"GAME_MODS_IDS_LIST": "12345=BADVERSION"}
+    env = {"GAME_MODS_IDS_LIST": f"{MOD_A}=BADVERSION"}
     with pytest.raises(ValueError, match="version does not match"):
         build_config(env, base_config)
 
@@ -201,8 +210,8 @@ def test_mods_json_file(base_config, tmp_path):
         tmp_path,
         "mods.json",
         [
-            {"modId": "12345", "name": "Test Mod", "version": "1.0.0"},
-            {"modId": "67890", "required": False},
+            {"modId": MOD_A, "name": "Test Mod", "version": "1.0.0"},
+            {"modId": MOD_B, "required": False},
         ],
     )
     env = {"GAME_MODS_JSON_FILE_PATH": str(mods_file)}
@@ -219,13 +228,27 @@ def test_mods_json_missing_modId(base_config, tmp_path):
         build_config(env, base_config)
 
 
+def test_mods_json_invalid_mod_id(base_config, tmp_path):
+    mods_file = write_json(tmp_path, "mods.json", [{"modId": "12345"}])
+    env = {"GAME_MODS_JSON_FILE_PATH": str(mods_file)}
+    with pytest.raises(ValueError, match="Invalid mod ID"):
+        build_config(env, base_config)
+
+
+def test_mods_json_must_be_array(base_config, tmp_path):
+    mods_file = write_json(tmp_path, "mods.json", {"modId": MOD_A})
+    env = {"GAME_MODS_JSON_FILE_PATH": str(mods_file)}
+    with pytest.raises(ValueError, match="must contain an array"):
+        build_config(env, base_config)
+
+
 def test_mods_deduplication(base_config, tmp_path):
     """Mod IDs from GAME_MODS_IDS_LIST should skip duplicates from JSON."""
     mods_file = write_json(
-        tmp_path, "mods.json", [{"modId": "12345", "name": "From JSON"}]
+        tmp_path, "mods.json", [{"modId": MOD_A, "name": "From JSON"}]
     )
     env = {
-        "GAME_MODS_IDS_LIST": "12345",
+        "GAME_MODS_IDS_LIST": MOD_A,
         "GAME_MODS_JSON_FILE_PATH": str(mods_file),
     }
     config = build_config(env, base_config)

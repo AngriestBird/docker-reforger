@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from launch_config import build_config, env_defined
+from launch_config import bool_str, build_config, env_defined, prune_mods
 
 # On SIGTERM, raise KeyboardInterrupt instead of exiting abruptly.
 signal.signal(signal.SIGTERM, signal.default_int_handler)
@@ -97,6 +97,12 @@ if os.environ["ARMA_CONFIG"] != "docker_generated":
 else:
     config_path = build_generated_config()
 
+if bool_str(os.environ["GAME_MODS_AUTO_PRUNE"]):
+    try:
+        prune_mods(config_path, os.environ["ARMA_WORKSHOP_DIR"])
+    except (OSError, ValueError) as err:
+        raise SystemExit(f"Failed to prune mods: {err}") from err
+
 launch = [
     os.environ["ARMA_BINARY"],
     "-config",
@@ -120,12 +126,12 @@ proc = subprocess.Popen(launch)
 
 try:
     try:
-        sys.exit(proc.wait())
+        exit_code = proc.wait()
     except KeyboardInterrupt:
         proc.send_signal(signal.SIGINT)
-        sys.exit(proc.wait())
-except SystemExit:
-    raise
+        exit_code = proc.wait()
 except BaseException:
     proc.kill()
     raise
+
+sys.exit(exit_code)

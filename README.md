@@ -94,6 +94,7 @@ RCON is activated by defining the `RCON_PASSWORD` variable.
 | `GAME_SUPPORTED_PLATFORMS` | `PLATFORM_PC,PLATFORM_XBL,PLATFORM_PSN` | Comma-separated list of supported platforms |
 | `GAME_CROSS_PLATFORM` | *(empty)* | Accept all platforms if `true`. Recommended over `GAME_SUPPORTED_PLATFORMS` |
 | `GAME_MODS_REQUIRED_BY_DEFAULT` | *(empty)* | Default `required` value for mods that do not explicitly set one. Server default is `true` |
+| `GAME_MODS_AUTO_PRUNE` | `false` | Remove downloaded mods that are not referenced by the active server config or one of its installed dependencies |
 | `GAME_MISSION_HEADER_JSON_FILE_PATH` | *(empty)* | Path to a JSON file containing mission header overrides (see [Mission Header](#mission-header)) |
 | `GAME_MODS_IDS_LIST` | *(empty)* | Comma-separated mod IDs with optional version (e.g. `5965770215E93269=1.0.6,5965550F24A0C152`) |
 | `GAME_MODS_JSON_FILE_PATH` | *(empty)* | Path to a JSON file containing an array of mod objects (see [Mods](#mods)) |
@@ -210,6 +211,8 @@ Example `mission_header.json`:
 ### Mods
 
 Workshop mods can be defined in two ways. You can use both or either of those.
+
+Set `GAME_MODS_AUTO_PRUNE=true` to remove unused mods from `ARMA_WORKSHOP_DIR` before the server starts. Pruning reads each mod's `ServerData.json`, keeps configured mods and their installed dependency tree, and removes only validated mod directories. Invalid or unrelated directories are left alone. If a configured mod or dependency has invalid metadata, startup stops without pruning. Interrupted pruning resumes on the next startup.
 
 #### GAME_MODS_IDS_LIST
 
