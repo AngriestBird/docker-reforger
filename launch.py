@@ -23,8 +23,10 @@ def random_passphrase():
     passphrase = "'"
     while "'" in passphrase:
         try:
-            with open("/usr/share/dict/american-english", encoding="utf-8") as f:
-                words = f.readlines()
+            with open(
+                "/usr/share/dict/american-english", encoding="utf-8"
+            ) as word_file:
+                words = word_file.readlines()
         except OSError as err:
             raise SystemExit(f"Failed to read word list: {err}") from err
         passphrase = "-".join(random.sample(words, 2)).replace("\n", "").lower()
@@ -52,8 +54,8 @@ def build_steamcmd_command(force_platform=None):
 
 def build_generated_config():
     try:
-        with open(DEFAULT_CONFIG, encoding="utf-8") as f:
-            config = json.load(f)
+        with open(DEFAULT_CONFIG, encoding="utf-8") as config_file:
+            config = json.load(config_file)
     except (OSError, ValueError) as err:
         raise SystemExit(f"Failed to load {DEFAULT_CONFIG}: {err}") from err
 
@@ -64,8 +66,8 @@ def build_generated_config():
         print(f"Admin password: {config['game']['passwordAdmin']}")
 
     try:
-        with open(CONFIG_GENERATED, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=4)
+        with open(CONFIG_GENERATED, "w", encoding="utf-8") as config_file:
+            json.dump(config, config_file, indent=4)
     except OSError as err:
         raise SystemExit(f"Failed to write {CONFIG_GENERATED}: {err}") from err
 

@@ -260,12 +260,12 @@ def test_persistence_config(base_config):
         "PERSISTENCE_HIVE_ID": "123",
     }
     config = build_config(env, base_config)
-    p = config["game"]["gameProperties"]["persistence"]
-    assert p["autoSaveInterval"] == 300
-    assert p["saveRetention"] == 5
-    assert p["loadSessionSave"]
-    assert not p["keepSessionSave"]
-    assert p["hiveId"] == 123
+    persistence = config["game"]["gameProperties"]["persistence"]
+    assert persistence["autoSaveInterval"] == 300
+    assert persistence["saveRetention"] == 5
+    assert persistence["loadSessionSave"]
+    assert not persistence["keepSessionSave"]
+    assert persistence["hiveId"] == 123
 
 
 def test_persistence_json_merge(base_config, tmp_path):
@@ -280,10 +280,10 @@ def test_persistence_json_merge(base_config, tmp_path):
     )
     env = {"PERSISTENCE_JSON_FILE_PATH": str(persistence_file)}
     config = build_config(env, base_config)
-    p = config["game"]["gameProperties"]["persistence"]
-    assert p["databases"] == {"foo": "bar"}
-    assert p["storages"] == {"baz": "qux"}
-    assert "ignored" not in p
+    persistence = config["game"]["gameProperties"]["persistence"]
+    assert persistence["databases"] == {"foo": "bar"}
+    assert persistence["storages"] == {"baz": "qux"}
+    assert "ignored" not in persistence
 
 
 def test_persistence_not_set_when_empty(base_config):
@@ -311,15 +311,15 @@ def test_operating_config(base_config):
         "OPERATING_JOIN_QUEUE_MAX_SIZE": "10",
     }
     config = build_config(env, base_config)
-    o = config["operating"]
-    assert o["lobbyPlayerSynchronise"]
-    assert not o["disableCrashReporter"]
-    assert o["disableServerShutdown"]
-    assert not o["disableAI"]
-    assert o["playerSaveTime"] == 120
-    assert o["aiLimit"] == 50
-    assert o["slotReservationTimeout"] == 60
-    assert o["joinQueue"]["maxSize"] == 10
+    operating = config["operating"]
+    assert operating["lobbyPlayerSynchronise"]
+    assert not operating["disableCrashReporter"]
+    assert operating["disableServerShutdown"]
+    assert not operating["disableAI"]
+    assert operating["playerSaveTime"] == 120
+    assert operating["aiLimit"] == 50
+    assert operating["slotReservationTimeout"] == 60
+    assert operating["joinQueue"]["maxSize"] == 10
 
 
 def test_operating_navmesh_all(base_config):
@@ -373,13 +373,13 @@ def test_game_properties_booleans(base_config):
         "GAME_PROPS_VON_CAN_TRANSMIT_CROSS_FACTION": "true",
     }
     config = build_config(env, base_config)
-    gp = config["game"]["gameProperties"]
-    assert not gp["battlEye"]
-    assert gp["disableThirdPerson"]
-    assert not gp["fastValidation"]
-    assert gp["VONDisableUI"]
-    assert gp["VONDisableDirectSpeechUI"]
-    assert gp["VONCanTransmitCrossFaction"]
+    game_properties = config["game"]["gameProperties"]
+    assert not game_properties["battlEye"]
+    assert game_properties["disableThirdPerson"]
+    assert not game_properties["fastValidation"]
+    assert game_properties["VONDisableUI"]
+    assert game_properties["VONDisableDirectSpeechUI"]
+    assert game_properties["VONCanTransmitCrossFaction"]
 
 
 def test_game_properties_integers(base_config):
@@ -389,7 +389,7 @@ def test_game_properties_integers(base_config):
         "GAME_PROPS_NETWORK_VIEW_DISTANCE": "2000",
     }
     config = build_config(env, base_config)
-    gp = config["game"]["gameProperties"]
-    assert gp["serverMaxViewDistance"] == 3000
-    assert gp["serverMinGrassDistance"] == 100
-    assert gp["networkViewDistance"] == 2000
+    game_properties = config["game"]["gameProperties"]
+    assert game_properties["serverMaxViewDistance"] == 3000
+    assert game_properties["serverMinGrassDistance"] == 100
+    assert game_properties["networkViewDistance"] == 2000

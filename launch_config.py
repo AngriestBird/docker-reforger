@@ -5,6 +5,7 @@ import os
 import re
 import secrets
 import stat
+from contextlib import suppress
 from pathlib import Path
 
 MOD_ID_LIST_RE = re.compile(r"^[A-Z\d,=.]+$")
@@ -52,8 +53,8 @@ def parse_int(env, key):
 
 def load_json_file(path):
     try:
-        with open(path, encoding="utf-8-sig") as f:
-            return json.load(f)
+        with open(path, encoding="utf-8-sig") as json_file:
+            return json.load(json_file)
     except (OSError, ValueError) as err:
         raise ValueError(f"Failed to load {path}: {err}") from err
 
@@ -165,9 +166,11 @@ def decode_mount_path(path):
 
 def mounted_paths():
     try:
-        with open(MOUNTINFO_PATH, encoding="utf-8", errors="surrogateescape") as f:
+        with open(
+            MOUNTINFO_PATH, encoding="utf-8", errors="surrogateescape"
+        ) as mountinfo_file:
             paths = set()
-            for line in f:
+            for line in mountinfo_file:
                 fields = line.split()
                 if len(fields) < 5:
                     raise ValueError(f"Invalid entry in {MOUNTINFO_PATH}: {line!r}")
@@ -183,28 +186,28 @@ def contains_mount(path, mount_paths):
     )
 
 
-def fd_mount_id(fd):
-    fdinfo_path = f"/proc/self/fdinfo/{fd}"
+def fd_mount_id(file_descriptor):
+    fdinfo_path = f"/proc/self/fdinfo/{file_descriptor}"
     try:
-        with open(fdinfo_path, encoding="utf-8") as f:
-            for line in f:
+        with open(fdinfo_path, encoding="utf-8") as fdinfo_file:
+            for line in fdinfo_file:
                 if line.startswith("mnt_id:"):
                     return int(line.split(":", 1)[1])
     except (OSError, ValueError) as err:
         raise OSError(
-            f"Failed to read mount ID for file descriptor {fd}: {err}"
+            f"Failed to read mount ID for file descriptor {file_descriptor}: {err}"
         ) from err
     raise OSError(f"Mount ID is missing from {fdinfo_path}")
 
 
-def validate_open_entry(fd, expected_stat, expected_mount_id, path):
-    actual_stat = os.fstat(fd)
+def validate_open_entry(file_descriptor, expected_stat, expected_mount_id, path):
+    actual_stat = os.fstat(file_descriptor)
     if (
         actual_stat.st_dev != expected_stat.st_dev
         or actual_stat.st_ino != expected_stat.st_ino
     ):
         raise ValueError(f"Filesystem entry changed before pruning: {path}")
-    if fd_mount_id(fd) != expected_mount_id:
+    if fd_mount_id(file_descriptor) != expected_mount_id:
         raise ValueError(f"Refusing to prune mounted content: {path}")
 
 
@@ -215,11 +218,13 @@ def same_entry(actual_stat, expected_stat):
     )
 
 
-def fd_path(fd):
+def fd_path(file_descriptor):
     try:
-        return Path(os.readlink(f"/proc/self/fd/{fd}"))
+        return Path(os.readlink(f"/proc/self/fd/{file_descriptor}"))
     except OSError as err:
-        raise OSError(f"Failed to resolve file descriptor {fd}: {err}") from err
+        raise OSError(
+            f"Failed to resolve file descriptor {file_descriptor}: {err}"
+        ) from err
 
 
 def open_directory_node(root_fd, node, expected_mount_id):
@@ -244,6 +249,38 @@ def open_directory_node(root_fd, node, expected_mount_id):
         raise
 
 
+def remove_empty_directory(root_fd, node, expected_mount_id):
+    parent_fd = (
+        os.dup(root_fd)
+        if node["parent"] is None
+        else open_directory_node(root_fd, node["parent"], expected_mount_id)
+    )
+    try:
+        current_stat = os.stat(
+            node["name"],
+            dir_fd=parent_fd,
+            follow_symlinks=False,
+        )
+        if not same_entry(current_stat, node["stat"]):
+            raise ValueError(f"Filesystem entry changed before pruning: {node['path']}")
+        os.rmdir(node["name"], dir_fd=parent_fd)
+    except OSError as err:
+        raise OSError(f"Failed to remove directory {node['path']}: {err}") from err
+    finally:
+        os.close(parent_fd)
+
+
+def remove_file_entry(directory_fd, name, expected_stat, expected_mount_id, path):
+    child_fd = os.open(name, ENTRY_OPEN_FLAGS, dir_fd=directory_fd)
+    try:
+        validate_open_entry(child_fd, expected_stat, expected_mount_id, path)
+        os.unlink(name, dir_fd=directory_fd)
+    except OSError as err:
+        raise OSError(f"Failed to remove file {path}: {err}") from err
+    finally:
+        os.close(child_fd)
+
+
 def remove_directory_tree(root_fd, name, expected_stat, expected_mount_id, path):
     current = {
         "name": name,
@@ -259,30 +296,7 @@ def remove_directory_tree(root_fd, name, expected_stat, expected_mount_id, path)
             with os.scandir(directory_fd) as entries:
                 entry = next(entries, None)
             if entry is None:
-                parent_fd = (
-                    os.dup(root_fd)
-                    if current["parent"] is None
-                    else open_directory_node(
-                        root_fd, current["parent"], expected_mount_id
-                    )
-                )
-                try:
-                    current_stat = os.stat(
-                        current["name"],
-                        dir_fd=parent_fd,
-                        follow_symlinks=False,
-                    )
-                    if not same_entry(current_stat, current["stat"]):
-                        raise ValueError(
-                            f"Filesystem entry changed before pruning: {current['path']}"
-                        )
-                    os.rmdir(current["name"], dir_fd=parent_fd)
-                except OSError as err:
-                    raise OSError(
-                        f"Failed to remove directory {current['path']}: {err}"
-                    ) from err
-                finally:
-                    os.close(parent_fd)
+                remove_empty_directory(root_fd, current, expected_mount_id)
                 removed_current = True
             else:
                 child_stat = entry.stat(follow_symlinks=False)
@@ -295,23 +309,13 @@ def remove_directory_tree(root_fd, name, expected_stat, expected_mount_id, path)
                         "stat": child_stat,
                     }
                 else:
-                    child_fd = os.open(
-                        entry.name, ENTRY_OPEN_FLAGS, dir_fd=directory_fd
+                    remove_file_entry(
+                        directory_fd,
+                        entry.name,
+                        child_stat,
+                        expected_mount_id,
+                        child_path,
                     )
-                    try:
-                        validate_open_entry(
-                            child_fd,
-                            child_stat,
-                            expected_mount_id,
-                            child_path,
-                        )
-                        os.unlink(entry.name, dir_fd=directory_fd)
-                    except OSError as err:
-                        raise OSError(
-                            f"Failed to remove file {child_path}: {err}"
-                        ) from err
-                    finally:
-                        os.close(child_fd)
         finally:
             os.close(directory_fd)
 
@@ -361,11 +365,11 @@ def write_json_at(directory_fd, name, content, size_limit):
     file_fd = None
     try:
         file_fd = os.open(name, flags, 0o600, dir_fd=directory_fd)
-        with os.fdopen(file_fd, "wb") as f:
+        with os.fdopen(file_fd, "wb") as output_file:
             file_fd = None
-            f.write(encoded)
-            f.flush()
-            os.fsync(f.fileno())
+            output_file.write(encoded)
+            output_file.flush()
+            os.fsync(output_file.fileno())
     except OSError as err:
         raise OSError(f"Failed to write {name}: {err}") from err
     finally:
@@ -383,9 +387,9 @@ def read_json_at(directory_fd, name, size_limit):
             raise ValueError(f"{name} is not a regular file")
         if file_stat.st_size > size_limit:
             raise ValueError(f"{name} exceeds the metadata size limit")
-        with os.fdopen(file_fd, "rb") as f:
+        with os.fdopen(file_fd, "rb") as input_file:
             file_fd = None
-            content = f.read(size_limit + 1)
+            content = input_file.read(size_limit + 1)
         if len(content) > size_limit:
             raise ValueError(f"{name} exceeds the metadata size limit")
         return json.loads(content.decode("utf-8"))
@@ -594,10 +598,8 @@ def stage_prune_candidates(workshop_fd, expected_mount_id, candidates):
     except BaseException as err:
         try:
             rollback_staged_mods(workshop_fd, quarantine_fd, staged_mods)
-            try:
+            with suppress(FileNotFoundError):
                 os.unlink(PRUNE_MANIFEST_FILE, dir_fd=quarantine_fd)
-            except FileNotFoundError:
-                pass
             sync_directory(quarantine_fd)
             os.rmdir(quarantine_name, dir_fd=workshop_fd)
             sync_directory(workshop_fd)
