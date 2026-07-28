@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-echo "INFO: Building arma-reforger-test image..."
+echo "INFO: Building docker-reforger-test image..."
 
-docker build -t arma-reforger-test .
+docker build -t docker-reforger-test .
 
-echo "INFO: arma-reforger-test is built. Please update your docker compose."
+echo "INFO: docker-reforger-test is built. Please update your docker compose."

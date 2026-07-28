@@ -1,9 +1,9 @@
 ---
 services:
-  arma-reforger:
-    image: ghcr.io/acemod/arma-reforger:latest
+  docker-reforger:
+    image: ghcr.io/angriestbird/docker-reforger:latest
     platform: linux/amd64
-    container_name: arma-reforger
+    container_name: docker-reforger
     ports:
       - "2001:2001/udp"
       - "17777:17777/udp"
