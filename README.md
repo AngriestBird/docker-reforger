@@ -255,8 +255,9 @@ The Dockerfile may not include every option that is currently available and may 
 ## Development
 
 App code lives in `src/` and is copied to `/app` in the image. Tests live in
-`tests/`. `persistence_default.json` stays at the repo root because it ships to
-`/persistence_default.json`, which users point `PERSISTENCE_JSON_FILE_PATH` at.
+`tests/`. `persistence_default.json` stays at the repository root because it
+ships to `/persistence_default.json`. Users point `PERSISTENCE_JSON_FILE_PATH`
+at that file.
 
 Pinned dev dependencies and tool config both live in `pyproject.toml`, as
 [PEP 735](https://peps.python.org/pep-0735/) groups. CI runs the same commands
