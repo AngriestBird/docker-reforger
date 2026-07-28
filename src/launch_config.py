@@ -22,14 +22,6 @@ SERVER_DATA_FILE = "ServerData.json"
 DIRECTORY_OPEN_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 ENTRY_OPEN_FLAGS = os.O_PATH | os.O_NOFOLLOW | os.O_CLOEXEC
 WORKSHOP_OPEN_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC
-PERSISTENCE_ENV_KEYS = (
-    "PERSISTENCE_AUTO_SAVE_INTERVAL",
-    "PERSISTENCE_SAVE_RETENTION",
-    "PERSISTENCE_LOAD_SESSION_SAVE",
-    "PERSISTENCE_KEEP_SESSION_SAVE",
-    "PERSISTENCE_HIVE_ID",
-    "PERSISTENCE_JSON_FILE_PATH",
-)
 
 
 def env_defined(env, key):
@@ -49,6 +41,24 @@ def parse_int(env, key):
         return int(env[key])
     except (KeyError, TypeError, ValueError) as err:
         raise ValueError(f"Invalid {key}: {env.get(key)!r}") from err
+
+
+def env_str(env, key):
+    return env[key]
+
+
+def env_bool(env, key):
+    return bool_str(env[key])
+
+
+def env_csv(env, key):
+    return split_csv(env[key])
+
+
+def env_navmesh_streaming(env, key):
+    if env[key].lower() == "all":
+        return []
+    return split_csv(env[key])
 
 
 def load_json_file(path):
@@ -610,6 +620,108 @@ def stage_prune_candidates(workshop_fd, expected_mount_id, candidates):
         raise
 
 
+def scan_installed_mods(workshop_fd, workshop_root):
+    installed_mods = {}
+    invalid_mods = {}
+    with os.scandir(workshop_fd) as entries:
+        for entry in entries:
+            mod_id = entry.name
+            if not MOD_ID_RE.fullmatch(mod_id):
+                continue
+            mod_path = workshop_root / mod_id
+            if not entry.is_dir(follow_symlinks=False):
+                err = ValueError(f"{mod_path} is not a regular directory")
+                invalid_mods[mod_id] = err
+                print(f"Skipping invalid mod directory {mod_path}: {err}")
+                continue
+            try:
+                mod_fd = os.open(mod_id, DIRECTORY_OPEN_FLAGS, dir_fd=workshop_fd)
+                try:
+                    installed_mods[mod_id] = load_installed_mod(
+                        mod_id, mod_fd, mod_path
+                    )
+                finally:
+                    os.close(mod_fd)
+            except (OSError, ValueError) as err:
+                invalid_mods[mod_id] = err
+                print(f"Skipping invalid mod directory {mod_path}: {err}")
+    return installed_mods, invalid_mods
+
+
+def retained_mod_ids(configured_ids, installed_mods, invalid_mods):
+    retained_ids = set()
+    pending_ids = list(configured_ids)
+    while pending_ids:
+        mod_id = pending_ids.pop()
+        if mod_id in retained_ids:
+            continue
+        retained_ids.add(mod_id)
+        if mod_id in invalid_mods:
+            raise ValueError(
+                f"Cannot safely prune because required mod {mod_id} is invalid: "
+                f"{invalid_mods[mod_id]}"
+            )
+        installed_mod = installed_mods.get(mod_id)
+        if installed_mod is not None:
+            pending_ids.extend(installed_mod["dependencies"])
+    return retained_ids
+
+
+def validate_prune_candidates(workshop_fd, candidates):
+    mount_paths = mounted_paths()
+    for installed_mod in candidates:
+        mod_id = installed_mod["id"]
+        mod_path = installed_mod["path"]
+        try:
+            current_stat = os.stat(mod_id, dir_fd=workshop_fd, follow_symlinks=False)
+        except OSError as err:
+            raise ValueError(
+                f"Mod directory changed before pruning: {mod_path}"
+            ) from err
+        if not stat.S_ISDIR(current_stat.st_mode) or not same_entry(
+            current_stat, installed_mod["stat"]
+        ):
+            raise ValueError(f"Mod directory changed before pruning: {mod_path}")
+        if contains_mount(mod_path, mount_paths):
+            raise ValueError(f"Refusing to prune mounted content: {mod_path}")
+
+
+def delete_prune_candidates(workshop_fd, expected_mount_id, candidates):
+    quarantine_name, quarantine_fd = stage_prune_candidates(
+        workshop_fd, expected_mount_id, candidates
+    )
+    pruned_paths = []
+    try:
+        for installed_mod in candidates:
+            remove_directory_tree(
+                quarantine_fd,
+                installed_mod["id"],
+                installed_mod["stat"],
+                expected_mount_id,
+                installed_mod["path"],
+            )
+            print(
+                f"Pruned mod {installed_mod['name']} "
+                f"({installed_mod['id']}) from {installed_mod['path']}"
+            )
+            pruned_paths.append(installed_mod["path"])
+        sync_directory(quarantine_fd)
+        try:
+            os.unlink(PRUNE_MANIFEST_FILE, dir_fd=quarantine_fd)
+        except OSError as err:
+            raise OSError(f"Failed to remove {PRUNE_MANIFEST_FILE}: {err}") from err
+        sync_directory(quarantine_fd)
+    finally:
+        os.close(quarantine_fd)
+
+    try:
+        os.rmdir(quarantine_name, dir_fd=workshop_fd)
+    except OSError as err:
+        raise OSError(f"Failed to remove mod pruning quarantine: {err}") from err
+    sync_directory(workshop_fd)
+    return pruned_paths
+
+
 def prune_mods(config_path, workshop_dir):
     configured_ids = configured_mod_ids(config_path)
     try:
@@ -622,52 +734,13 @@ def prune_mods(config_path, workshop_dir):
         os.close(workshop_fd)
         raise
 
-    installed_mods = {}
-    invalid_mods = {}
     try:
         workshop_root = fd_path(workshop_fd)
         workshop_mount_id = fd_mount_id(workshop_fd)
         recover_prune_quarantines(workshop_fd, workshop_mount_id, workshop_root)
 
-        with os.scandir(workshop_fd) as entries:
-            for entry in entries:
-                mod_id = entry.name
-                if not MOD_ID_RE.fullmatch(mod_id):
-                    continue
-                mod_path = workshop_root / mod_id
-                if not entry.is_dir(follow_symlinks=False):
-                    err = ValueError(f"{mod_path} is not a regular directory")
-                    invalid_mods[mod_id] = err
-                    print(f"Skipping invalid mod directory {mod_path}: {err}")
-                    continue
-                try:
-                    mod_fd = os.open(mod_id, DIRECTORY_OPEN_FLAGS, dir_fd=workshop_fd)
-                    try:
-                        mod = load_installed_mod(mod_id, mod_fd, mod_path)
-                    finally:
-                        os.close(mod_fd)
-                except (OSError, ValueError) as err:
-                    invalid_mods[mod_id] = err
-                    print(f"Skipping invalid mod directory {mod_path}: {err}")
-                    continue
-                installed_mods[mod_id] = mod
-
-        retained_ids = set()
-        pending_ids = list(configured_ids)
-        while pending_ids:
-            mod_id = pending_ids.pop()
-            if mod_id in retained_ids:
-                continue
-            retained_ids.add(mod_id)
-            if mod_id in invalid_mods:
-                raise ValueError(
-                    f"Cannot safely prune because required mod {mod_id} is invalid: "
-                    f"{invalid_mods[mod_id]}"
-                )
-            installed_mod = installed_mods.get(mod_id)
-            if installed_mod is not None:
-                pending_ids.extend(installed_mod["dependencies"])
-
+        installed_mods, invalid_mods = scan_installed_mods(workshop_fd, workshop_root)
+        retained_ids = retained_mod_ids(configured_ids, installed_mods, invalid_mods)
         candidates = [
             installed_mod
             for mod_id, installed_mod in sorted(installed_mods.items())
@@ -676,73 +749,79 @@ def prune_mods(config_path, workshop_dir):
         if not candidates:
             return []
 
-        mount_paths = mounted_paths()
-        for installed_mod in candidates:
-            mod_id = installed_mod["id"]
-            mod_path = installed_mod["path"]
-            try:
-                current_stat = os.stat(
-                    mod_id, dir_fd=workshop_fd, follow_symlinks=False
-                )
-            except OSError as err:
-                raise ValueError(
-                    f"Mod directory changed before pruning: {mod_path}"
-                ) from err
-            if not stat.S_ISDIR(current_stat.st_mode) or not same_entry(
-                current_stat, installed_mod["stat"]
-            ):
-                raise ValueError(f"Mod directory changed before pruning: {mod_path}")
-            if contains_mount(mod_path, mount_paths):
-                raise ValueError(f"Refusing to prune mounted content: {mod_path}")
-
-        quarantine_name, quarantine_fd = stage_prune_candidates(
-            workshop_fd, workshop_mount_id, candidates
-        )
-        pruned_paths = []
-        try:
-            for installed_mod in candidates:
-                remove_directory_tree(
-                    quarantine_fd,
-                    installed_mod["id"],
-                    installed_mod["stat"],
-                    workshop_mount_id,
-                    installed_mod["path"],
-                )
-                print(
-                    f"Pruned mod {installed_mod['name']} "
-                    f"({installed_mod['id']}) from {installed_mod['path']}"
-                )
-                pruned_paths.append(installed_mod["path"])
-            sync_directory(quarantine_fd)
-            try:
-                os.unlink(PRUNE_MANIFEST_FILE, dir_fd=quarantine_fd)
-            except OSError as err:
-                raise OSError(f"Failed to remove {PRUNE_MANIFEST_FILE}: {err}") from err
-            sync_directory(quarantine_fd)
-        finally:
-            os.close(quarantine_fd)
-
-        try:
-            os.rmdir(quarantine_name, dir_fd=workshop_fd)
-        except OSError as err:
-            raise OSError(f"Failed to remove mod pruning quarantine: {err}") from err
-        sync_directory(workshop_fd)
-        return pruned_paths
+        validate_prune_candidates(workshop_fd, candidates)
+        return delete_prune_candidates(workshop_fd, workshop_mount_id, candidates)
     finally:
         os.close(workshop_fd)
 
 
-def build_config(env, base_config):
-    config = copy.deepcopy(base_config)
+SERVER_ENV_MAP = (
+    ("SERVER_BIND_ADDRESS", "bindAddress", env_str),
+    ("SERVER_BIND_PORT", "bindPort", parse_int),
+    ("SERVER_PUBLIC_ADDRESS", "publicAddress", env_str),
+    ("SERVER_PUBLIC_PORT", "publicPort", parse_int),
+)
+GAME_ENV_MAP = (
+    ("GAME_NAME", "name", env_str),
+    ("GAME_PASSWORD", "password", env_str),
+    ("GAME_PASSWORD_ADMIN", "passwordAdmin", env_str),
+    ("GAME_ADMINS", "admins", env_csv),
+    ("GAME_SCENARIO_ID", "scenarioId", env_str),
+    ("GAME_MAX_PLAYERS", "maxPlayers", parse_int),
+    ("GAME_VISIBLE", "visible", env_bool),
+    ("GAME_SUPPORTED_PLATFORMS", "supportedPlatforms", env_csv),
+    ("GAME_CROSS_PLATFORM", "crossPlatform", env_bool),
+    ("GAME_MODS_REQUIRED_BY_DEFAULT", "modsRequiredByDefault", env_bool),
+)
+GAME_PROPS_ENV_MAP = (
+    ("GAME_PROPS_BATTLEYE", "battlEye", env_bool),
+    ("GAME_PROPS_DISABLE_THIRD_PERSON", "disableThirdPerson", env_bool),
+    ("GAME_PROPS_FAST_VALIDATION", "fastValidation", env_bool),
+    ("GAME_PROPS_SERVER_MAX_VIEW_DISTANCE", "serverMaxViewDistance", parse_int),
+    ("GAME_PROPS_SERVER_MIN_GRASS_DISTANCE", "serverMinGrassDistance", parse_int),
+    ("GAME_PROPS_NETWORK_VIEW_DISTANCE", "networkViewDistance", parse_int),
+    ("GAME_PROPS_VON_DISABLE_UI", "VONDisableUI", env_bool),
+    ("GAME_PROPS_VON_DISABLE_DIRECT_SPEECH_UI", "VONDisableDirectSpeechUI", env_bool),
+    (
+        "GAME_PROPS_VON_CAN_TRANSMIT_CROSS_FACTION",
+        "VONCanTransmitCrossFaction",
+        env_bool,
+    ),
+)
+PERSISTENCE_ENV_MAP = (
+    ("PERSISTENCE_AUTO_SAVE_INTERVAL", "autoSaveInterval", parse_int),
+    ("PERSISTENCE_SAVE_RETENTION", "saveRetention", parse_int),
+    ("PERSISTENCE_LOAD_SESSION_SAVE", "loadSessionSave", env_bool),
+    ("PERSISTENCE_KEEP_SESSION_SAVE", "keepSessionSave", env_bool),
+    ("PERSISTENCE_HIVE_ID", "hiveId", parse_int),
+)
+PERSISTENCE_ENV_KEYS = tuple(key for key, _, _ in PERSISTENCE_ENV_MAP) + (
+    "PERSISTENCE_JSON_FILE_PATH",
+)
+OPERATING_ENV_MAP = (
+    ("OPERATING_LOBBY_PLAYER_SYNCHRONISE", "lobbyPlayerSynchronise", env_bool),
+    ("OPERATING_DISABLE_CRASH_REPORTER", "disableCrashReporter", env_bool),
+    (
+        "OPERATING_DISABLE_NAVMESH_STREAMING",
+        "disableNavmeshStreaming",
+        env_navmesh_streaming,
+    ),
+    ("OPERATING_DISABLE_SERVER_SHUTDOWN", "disableServerShutdown", env_bool),
+    ("OPERATING_DISABLE_AI", "disableAI", env_bool),
+    ("OPERATING_PLAYER_SAVE_TIME", "playerSaveTime", parse_int),
+    ("OPERATING_AI_LIMIT", "aiLimit", parse_int),
+    ("OPERATING_SLOT_RESERVATION_TIMEOUT", "slotReservationTimeout", parse_int),
+)
 
-    if env_defined(env, "SERVER_BIND_ADDRESS"):
-        config["bindAddress"] = env["SERVER_BIND_ADDRESS"]
-    if env_defined(env, "SERVER_BIND_PORT"):
-        config["bindPort"] = parse_int(env, "SERVER_BIND_PORT")
-    if env_defined(env, "SERVER_PUBLIC_ADDRESS"):
-        config["publicAddress"] = env["SERVER_PUBLIC_ADDRESS"]
-    if env_defined(env, "SERVER_PUBLIC_PORT"):
-        config["publicPort"] = parse_int(env, "SERVER_PUBLIC_PORT")
+
+def apply_env_overrides(target, env, env_map):
+    for key, name, convert in env_map:
+        if env_defined(env, key):
+            target[name] = convert(env, key)
+
+
+def apply_server_config(config, env):
+    apply_env_overrides(config, env, SERVER_ENV_MAP)
     if env_defined(env, "SERVER_A2S_ADDRESS") and env_defined(env, "SERVER_A2S_PORT"):
         config["a2s"] = {
             "address": env["SERVER_A2S_ADDRESS"],
@@ -751,199 +830,129 @@ def build_config(env, base_config):
     else:
         config.pop("a2s", None)
 
-    if (
-        env_defined(env, "RCON_PASSWORD")
-        and env_defined(env, "RCON_ADDRESS")
-        and env_defined(env, "RCON_PORT")
-    ):
-        if env_defined(env, "RCON_BLACKLIST") and env_defined(env, "RCON_WHITELIST"):
-            raise ValueError("RCON_BLACKLIST and RCON_WHITELIST cannot both be set")
-        rcon = {
-            "address": env["RCON_ADDRESS"],
-            "port": parse_int(env, "RCON_PORT"),
-            "password": env["RCON_PASSWORD"],
-            "permission": env.get("RCON_PERMISSION")
-            or config.get("rcon", {}).get("permission")
-            or "admin",
-        }
-        if env_defined(env, "RCON_MAX_CLIENTS"):
-            rcon["maxClients"] = parse_int(env, "RCON_MAX_CLIENTS")
-        if env_defined(env, "RCON_BLACKLIST"):
-            rcon["blacklist"] = split_csv(env["RCON_BLACKLIST"])
-        if env_defined(env, "RCON_WHITELIST"):
-            rcon["whitelist"] = split_csv(env["RCON_WHITELIST"])
-        config["rcon"] = rcon
-    else:
+
+def apply_rcon_config(config, env):
+    required_keys = ("RCON_PASSWORD", "RCON_ADDRESS", "RCON_PORT")
+    if not all(env_defined(env, key) for key in required_keys):
         config.pop("rcon", None)
+        return
+    if env_defined(env, "RCON_BLACKLIST") and env_defined(env, "RCON_WHITELIST"):
+        raise ValueError("RCON_BLACKLIST and RCON_WHITELIST cannot both be set")
 
-    if env_defined(env, "GAME_NAME"):
-        config["game"]["name"] = env["GAME_NAME"]
-    if env_defined(env, "GAME_PASSWORD"):
-        config["game"]["password"] = env["GAME_PASSWORD"]
-    if env_defined(env, "GAME_PASSWORD_ADMIN"):
-        config["game"]["passwordAdmin"] = env["GAME_PASSWORD_ADMIN"]
-    if env_defined(env, "GAME_ADMINS"):
-        config["game"]["admins"] = split_csv(env["GAME_ADMINS"])
-    if env_defined(env, "GAME_SCENARIO_ID"):
-        config["game"]["scenarioId"] = env["GAME_SCENARIO_ID"]
-    if env_defined(env, "GAME_MAX_PLAYERS"):
-        config["game"]["maxPlayers"] = parse_int(env, "GAME_MAX_PLAYERS")
-    if env_defined(env, "GAME_VISIBLE"):
-        config["game"]["visible"] = bool_str(env["GAME_VISIBLE"])
-    if env_defined(env, "GAME_SUPPORTED_PLATFORMS"):
-        config["game"]["supportedPlatforms"] = split_csv(
-            env["GAME_SUPPORTED_PLATFORMS"]
-        )
-    if env_defined(env, "GAME_CROSS_PLATFORM"):
-        config["game"]["crossPlatform"] = bool_str(env["GAME_CROSS_PLATFORM"])
-    mods_required_by_default = None
-    if env_defined(env, "GAME_MODS_REQUIRED_BY_DEFAULT"):
-        mods_required_by_default = bool_str(env["GAME_MODS_REQUIRED_BY_DEFAULT"])
-        config["game"]["modsRequiredByDefault"] = mods_required_by_default
-    if env_defined(env, "GAME_PROPS_BATTLEYE"):
-        config["game"]["gameProperties"]["battlEye"] = bool_str(
-            env["GAME_PROPS_BATTLEYE"]
-        )
-    if env_defined(env, "GAME_PROPS_DISABLE_THIRD_PERSON"):
-        config["game"]["gameProperties"]["disableThirdPerson"] = bool_str(
-            env["GAME_PROPS_DISABLE_THIRD_PERSON"]
-        )
-    if env_defined(env, "GAME_PROPS_FAST_VALIDATION"):
-        config["game"]["gameProperties"]["fastValidation"] = bool_str(
-            env["GAME_PROPS_FAST_VALIDATION"]
-        )
-    if env_defined(env, "GAME_PROPS_SERVER_MAX_VIEW_DISTANCE"):
-        config["game"]["gameProperties"]["serverMaxViewDistance"] = parse_int(
-            env, "GAME_PROPS_SERVER_MAX_VIEW_DISTANCE"
-        )
-    if env_defined(env, "GAME_PROPS_SERVER_MIN_GRASS_DISTANCE"):
-        config["game"]["gameProperties"]["serverMinGrassDistance"] = parse_int(
-            env, "GAME_PROPS_SERVER_MIN_GRASS_DISTANCE"
-        )
-    if env_defined(env, "GAME_PROPS_NETWORK_VIEW_DISTANCE"):
-        config["game"]["gameProperties"]["networkViewDistance"] = parse_int(
-            env, "GAME_PROPS_NETWORK_VIEW_DISTANCE"
-        )
-    if env_defined(env, "GAME_PROPS_VON_DISABLE_UI"):
-        config["game"]["gameProperties"]["VONDisableUI"] = bool_str(
-            env["GAME_PROPS_VON_DISABLE_UI"]
-        )
-    if env_defined(env, "GAME_PROPS_VON_DISABLE_DIRECT_SPEECH_UI"):
-        config["game"]["gameProperties"]["VONDisableDirectSpeechUI"] = bool_str(
-            env["GAME_PROPS_VON_DISABLE_DIRECT_SPEECH_UI"]
-        )
-    if env_defined(env, "GAME_PROPS_VON_CAN_TRANSMIT_CROSS_FACTION"):
-        config["game"]["gameProperties"]["VONCanTransmitCrossFaction"] = bool_str(
-            env["GAME_PROPS_VON_CAN_TRANSMIT_CROSS_FACTION"]
-        )
+    rcon = {
+        "address": env["RCON_ADDRESS"],
+        "port": parse_int(env, "RCON_PORT"),
+        "password": env["RCON_PASSWORD"],
+        "permission": env.get("RCON_PERMISSION")
+        or config.get("rcon", {}).get("permission")
+        or "admin",
+    }
+    if env_defined(env, "RCON_MAX_CLIENTS"):
+        rcon["maxClients"] = parse_int(env, "RCON_MAX_CLIENTS")
+    if env_defined(env, "RCON_BLACKLIST"):
+        rcon["blacklist"] = split_csv(env["RCON_BLACKLIST"])
+    if env_defined(env, "RCON_WHITELIST"):
+        rcon["whitelist"] = split_csv(env["RCON_WHITELIST"])
+    config["rcon"] = rcon
 
+
+def apply_game_properties(config, env):
+    game_properties = config["game"]["gameProperties"]
+    apply_env_overrides(game_properties, env, GAME_PROPS_ENV_MAP)
     if env_defined(env, "GAME_MISSION_HEADER_JSON_FILE_PATH"):
-        config["game"]["gameProperties"]["missionHeader"] = load_json_file(
+        game_properties["missionHeader"] = load_json_file(
             env["GAME_MISSION_HEADER_JSON_FILE_PATH"]
         )
     else:
-        config["game"]["gameProperties"]["missionHeader"] = {}
+        game_properties["missionHeader"] = {}
 
-    config["game"]["mods"] = []
-    config_mod_ids = []
+
+def default_mod_required(env):
+    if env_defined(env, "GAME_MODS_REQUIRED_BY_DEFAULT"):
+        return bool_str(env["GAME_MODS_REQUIRED_BY_DEFAULT"])
+    return None
+
+
+def parse_mods_ids_list(env, required_default, seen_ids):
+    if not MOD_ID_LIST_RE.match(env["GAME_MODS_IDS_LIST"]):
+        raise ValueError("Illegal characters in GAME_MODS_IDS_LIST env")
+
+    mods = []
+    for mod in split_csv(env["GAME_MODS_IDS_LIST"]):
+        mod_details = mod.split("=")
+        if not 0 < len(mod_details) < 3:
+            raise ValueError(f"{mod} mod not defined properly")
+        mod_id = validate_mod_id(mod_details[0], "GAME_MODS_IDS_LIST")
+        if mod_id in seen_ids:
+            continue
+        mod_config = {"modId": mod_id}
+        if len(mod_details) == 2:
+            if not MOD_VERSION_RE.match(mod_details[1]):
+                raise ValueError(f"{mod} mod version does not match the pattern")
+            mod_config["version"] = mod_details[1]
+        if required_default is not None:
+            mod_config["required"] = required_default
+        seen_ids.add(mod_id)
+        mods.append(mod_config)
+    return mods
+
+
+def parse_mods_json_file(env, required_default, seen_ids):
+    json_mods = load_json_file(env["GAME_MODS_JSON_FILE_PATH"])
+    if not isinstance(json_mods, list):
+        raise ValueError("GAME_MODS_JSON_FILE_PATH must contain an array")
+
+    allowed_keys = ("modId", "name", "version", "required")
+    mods = []
+    for provided_mod in json_mods:
+        if not isinstance(provided_mod, dict) or "modId" not in provided_mod:
+            raise ValueError(
+                "Entry in GAME_MODS_JSON_FILE_PATH file does not contain modId: "
+                f"{provided_mod}"
+            )
+        mod_id = validate_mod_id(provided_mod["modId"], "GAME_MODS_JSON_FILE_PATH")
+        if mod_id in seen_ids:
+            continue
+        valid_mod = {
+            key: provided_mod[key] for key in allowed_keys if key in provided_mod
+        }
+        if required_default is not None and "required" not in valid_mod:
+            valid_mod["required"] = required_default
+        seen_ids.add(mod_id)
+        mods.append(valid_mod)
+    return mods
+
+
+def apply_mods_config(config, env):
+    required_default = default_mod_required(env)
+    seen_ids = set()
+    mods = []
     if env_defined(env, "GAME_MODS_IDS_LIST"):
-        if not MOD_ID_LIST_RE.match(env["GAME_MODS_IDS_LIST"]):
-            raise ValueError("Illegal characters in GAME_MODS_IDS_LIST env")
-        for mod in split_csv(env["GAME_MODS_IDS_LIST"]):
-            mod_details = mod.split("=")
-            if not 0 < len(mod_details) < 3:
-                raise ValueError(f"{mod} mod not defined properly")
-            mod_id = validate_mod_id(mod_details[0], "GAME_MODS_IDS_LIST")
-            if mod_id in config_mod_ids:
-                continue
-            mod_config = {"modId": mod_id}
-            if len(mod_details) == 2:
-                if not MOD_VERSION_RE.match(mod_details[1]):
-                    raise ValueError(f"{mod} mod version does not match the pattern")
-                mod_config["version"] = mod_details[1]
-            if mods_required_by_default is not None:
-                mod_config["required"] = mods_required_by_default
-            config_mod_ids.append(mod_id)
-            config["game"]["mods"].append(mod_config)
+        mods.extend(parse_mods_ids_list(env, required_default, seen_ids))
     if env_defined(env, "GAME_MODS_JSON_FILE_PATH"):
-        json_mods = load_json_file(env["GAME_MODS_JSON_FILE_PATH"])
-        if not isinstance(json_mods, list):
-            raise ValueError("GAME_MODS_JSON_FILE_PATH must contain an array")
-        allowed_keys = ["modId", "name", "version", "required"]
-        for provided_mod in json_mods:
-            if not isinstance(provided_mod, dict) or "modId" not in provided_mod:
-                raise ValueError(
-                    f"Entry in GAME_MODS_JSON_FILE_PATH file does not contain modId: {provided_mod}"
-                )
-            mod_id = validate_mod_id(provided_mod["modId"], "GAME_MODS_JSON_FILE_PATH")
-            if mod_id in config_mod_ids:
-                continue
-            valid_mod = {
-                key: provided_mod[key] for key in allowed_keys if key in provided_mod
-            }
-            if mods_required_by_default is not None and "required" not in valid_mod:
-                valid_mod["required"] = mods_required_by_default
-            config_mod_ids.append(mod_id)
-            config["game"]["mods"].append(valid_mod)
+        mods.extend(parse_mods_json_file(env, required_default, seen_ids))
+    config["game"]["mods"] = mods
 
-    persistence_defined = any(env_defined(env, key) for key in PERSISTENCE_ENV_KEYS)
-    if persistence_defined:
-        persistence = {}
-        if env_defined(env, "PERSISTENCE_AUTO_SAVE_INTERVAL"):
-            persistence["autoSaveInterval"] = parse_int(
-                env, "PERSISTENCE_AUTO_SAVE_INTERVAL"
-            )
-        if env_defined(env, "PERSISTENCE_SAVE_RETENTION"):
-            persistence["saveRetention"] = parse_int(env, "PERSISTENCE_SAVE_RETENTION")
-        if env_defined(env, "PERSISTENCE_LOAD_SESSION_SAVE"):
-            persistence["loadSessionSave"] = bool_str(
-                env["PERSISTENCE_LOAD_SESSION_SAVE"]
-            )
-        if env_defined(env, "PERSISTENCE_KEEP_SESSION_SAVE"):
-            persistence["keepSessionSave"] = bool_str(
-                env["PERSISTENCE_KEEP_SESSION_SAVE"]
-            )
-        if env_defined(env, "PERSISTENCE_HIVE_ID"):
-            persistence["hiveId"] = parse_int(env, "PERSISTENCE_HIVE_ID")
-        if env_defined(env, "PERSISTENCE_JSON_FILE_PATH"):
-            persistence_json = load_json_file(env["PERSISTENCE_JSON_FILE_PATH"])
-            allowed_keys = ["databases", "storages"]
-            for key in allowed_keys:
-                if key in persistence_json:
-                    persistence[key] = persistence_json[key]
-        config["game"]["gameProperties"]["persistence"] = persistence
-    else:
-        config["game"]["gameProperties"].pop("persistence", None)
 
+def apply_persistence_config(config, env):
+    game_properties = config["game"]["gameProperties"]
+    if not any(env_defined(env, key) for key in PERSISTENCE_ENV_KEYS):
+        game_properties.pop("persistence", None)
+        return
+
+    persistence = {}
+    apply_env_overrides(persistence, env, PERSISTENCE_ENV_MAP)
+    if env_defined(env, "PERSISTENCE_JSON_FILE_PATH"):
+        persistence_json = load_json_file(env["PERSISTENCE_JSON_FILE_PATH"])
+        for key in ("databases", "storages"):
+            if key in persistence_json:
+                persistence[key] = persistence_json[key]
+    game_properties["persistence"] = persistence
+
+
+def apply_operating_config(config, env):
     operating = {}
-    if env_defined(env, "OPERATING_LOBBY_PLAYER_SYNCHRONISE"):
-        operating["lobbyPlayerSynchronise"] = bool_str(
-            env["OPERATING_LOBBY_PLAYER_SYNCHRONISE"]
-        )
-    if env_defined(env, "OPERATING_DISABLE_CRASH_REPORTER"):
-        operating["disableCrashReporter"] = bool_str(
-            env["OPERATING_DISABLE_CRASH_REPORTER"]
-        )
-    if env_defined(env, "OPERATING_DISABLE_NAVMESH_STREAMING"):
-        val = env["OPERATING_DISABLE_NAVMESH_STREAMING"]
-        if val.lower() == "all":
-            operating["disableNavmeshStreaming"] = []
-        else:
-            operating["disableNavmeshStreaming"] = split_csv(val)
-    if env_defined(env, "OPERATING_DISABLE_SERVER_SHUTDOWN"):
-        operating["disableServerShutdown"] = bool_str(
-            env["OPERATING_DISABLE_SERVER_SHUTDOWN"]
-        )
-    if env_defined(env, "OPERATING_DISABLE_AI"):
-        operating["disableAI"] = bool_str(env["OPERATING_DISABLE_AI"])
-    if env_defined(env, "OPERATING_PLAYER_SAVE_TIME"):
-        operating["playerSaveTime"] = parse_int(env, "OPERATING_PLAYER_SAVE_TIME")
-    if env_defined(env, "OPERATING_AI_LIMIT"):
-        operating["aiLimit"] = parse_int(env, "OPERATING_AI_LIMIT")
-    if env_defined(env, "OPERATING_SLOT_RESERVATION_TIMEOUT"):
-        operating["slotReservationTimeout"] = parse_int(
-            env, "OPERATING_SLOT_RESERVATION_TIMEOUT"
-        )
+    apply_env_overrides(operating, env, OPERATING_ENV_MAP)
     if env_defined(env, "OPERATING_JOIN_QUEUE_MAX_SIZE"):
         operating["joinQueue"] = {
             "maxSize": parse_int(env, "OPERATING_JOIN_QUEUE_MAX_SIZE")
@@ -953,4 +962,14 @@ def build_config(env, base_config):
     else:
         config.pop("operating", None)
 
+
+def build_config(env, base_config):
+    config = copy.deepcopy(base_config)
+    apply_server_config(config, env)
+    apply_rcon_config(config, env)
+    apply_env_overrides(config["game"], env, GAME_ENV_MAP)
+    apply_game_properties(config, env)
+    apply_mods_config(config, env)
+    apply_persistence_config(config, env)
+    apply_operating_config(config, env)
     return config

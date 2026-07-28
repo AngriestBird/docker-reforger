@@ -32,9 +32,16 @@ def resolve_config_path():
 def resolve_a2s_settings():
     config_path = resolve_config_path()
     if config_path.exists():
-        with config_path.open() as f:
-            config = json.load(f)
-        return config.get("a2s")
+        with config_path.open(encoding="utf-8-sig") as config_file:
+            config = json.load(config_file)
+        a2s_config = config.get("a2s") if isinstance(config, dict) else None
+        if not isinstance(a2s_config, dict):
+            return None
+        address = a2s_config.get("address")
+        port = a2s_config.get("port")
+        if address is None or port is None:
+            return None
+        return {"address": address, "port": int(port)}
 
     address = os.environ.get("SERVER_A2S_ADDRESS", "")
     port = os.environ.get("SERVER_A2S_PORT", "")
@@ -66,6 +73,6 @@ try:
     if not a2s:
         sys.exit(0)
     sys.exit(0 if probe_server(a2s["address"], a2s["port"]) else 1)
-except Exception as err:
+except (OSError, TypeError, ValueError) as err:
     print(f"Health check failed: {err}", file=sys.stderr)
     sys.exit(1)

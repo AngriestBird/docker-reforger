@@ -38,6 +38,13 @@ def write_mod(workshop, mod_id, dependencies=None, encoding="utf-8"):
     return mod_dir
 
 
+def patch_revision(mod_dir, **changes):
+    path = mod_dir / "ServerData.json"
+    server_data = json.loads(path.read_text())
+    server_data["revision"].update(changes)
+    path.write_text(json.dumps(server_data))
+
+
 def test_prunes_only_unreferenced_mods(tmp_path):
     workshop = tmp_path / "workshop"
     workshop.mkdir()
@@ -439,3 +446,125 @@ def test_reads_server_data_with_utf8_bom(tmp_path):
     config = write_config(tmp_path, [])
 
     assert prune_mods(config, workshop) == [stale]
+
+
+def test_missing_workshop_directory_is_a_no_op(tmp_path):
+    config = write_config(tmp_path, [MOD_A])
+
+    assert not prune_mods(config, tmp_path / "missing")
+
+
+def test_preserves_dependencies_declared_with_mod_id_key(tmp_path):
+    workshop = tmp_path / "workshop"
+    workshop.mkdir()
+    root = write_mod(workshop, MOD_A, [{"modId": MOD_B}])
+    dependency = write_mod(workshop, MOD_B)
+    stale = write_mod(workshop, MOD_C)
+    config = write_config(tmp_path, [MOD_A])
+
+    assert prune_mods(config, workshop) == [stale]
+    assert root.exists()
+    assert dependency.exists()
+
+
+def test_dependency_cycle_terminates(tmp_path):
+    workshop = tmp_path / "workshop"
+    workshop.mkdir()
+    first = write_mod(workshop, MOD_A, [MOD_B])
+    second = write_mod(workshop, MOD_B, [MOD_A])
+    stale = write_mod(workshop, MOD_C)
+    config = write_config(tmp_path, [MOD_A])
+
+    assert prune_mods(config, workshop) == [stale]
+    assert first.exists()
+    assert second.exists()
+
+
+def test_diamond_dependencies_are_all_retained(tmp_path):
+    workshop = tmp_path / "workshop"
+    workshop.mkdir()
+    root = write_mod(workshop, MOD_A, [MOD_B, MOD_C])
+    left = write_mod(workshop, MOD_B, [MOD_D])
+    right = write_mod(workshop, MOD_C, [MOD_D])
+    shared = write_mod(workshop, MOD_D)
+    stale = write_mod(workshop, MOD_E)
+    config = write_config(tmp_path, [MOD_A])
+
+    assert prune_mods(config, workshop) == [stale]
+    assert root.exists()
+    assert left.exists()
+    assert right.exists()
+    assert shared.exists()
+
+
+def test_configured_mod_that_is_not_installed_is_ignored(tmp_path):
+    workshop = tmp_path / "workshop"
+    workshop.mkdir()
+    stale = write_mod(workshop, MOD_B)
+    config = write_config(tmp_path, [MOD_A])
+
+    assert prune_mods(config, workshop) == [stale]
+    assert not stale.exists()
+
+
+def test_skips_mod_that_is_not_fully_downloaded(tmp_path):
+    workshop = tmp_path / "workshop"
+    workshop.mkdir()
+    partial = write_mod(workshop, MOD_A)
+    patch_revision(partial, downloaded=False)
+    config = write_config(tmp_path, [])
+
+    assert not prune_mods(config, workshop)
+    assert partial.exists()
+
+
+def test_skips_mod_with_non_list_dependencies(tmp_path):
+    workshop = tmp_path / "workshop"
+    workshop.mkdir()
+    invalid = write_mod(workshop, MOD_A)
+    patch_revision(invalid, dependencies={"id": MOD_B})
+    config = write_config(tmp_path, [])
+
+    assert not prune_mods(config, workshop)
+    assert invalid.exists()
+
+
+@pytest.mark.parametrize(
+    "directory_name",
+    ["abcdef1234567890", "111111111111111", "11111111111111111"],
+)
+def test_ignores_directories_that_are_not_mod_ids(tmp_path, directory_name):
+    workshop = tmp_path / "workshop"
+    workshop.mkdir()
+    unrelated = workshop / directory_name
+    unrelated.mkdir()
+    (unrelated / "content.bin").write_bytes(b"content")
+    config = write_config(tmp_path, [])
+
+    assert not prune_mods(config, workshop)
+    assert unrelated.exists()
+
+
+def test_prunes_every_stale_mod_in_sorted_order(tmp_path):
+    workshop = tmp_path / "workshop"
+    workshop.mkdir()
+    third = write_mod(workshop, MOD_C)
+    first = write_mod(workshop, MOD_A)
+    second = write_mod(workshop, MOD_B)
+    config = write_config(tmp_path, [])
+
+    assert prune_mods(config, workshop) == [first, second, third]
+    assert not first.exists()
+    assert not second.exists()
+    assert not third.exists()
+
+
+def test_leaves_no_quarantine_behind_when_nothing_to_prune(tmp_path):
+    workshop = tmp_path / "workshop"
+    workshop.mkdir()
+    configured = write_mod(workshop, MOD_A)
+    config = write_config(tmp_path, [MOD_A])
+
+    assert not prune_mods(config, workshop)
+    assert configured.exists()
+    assert [path.name for path in workshop.iterdir()] == [MOD_A]

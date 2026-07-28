@@ -4,11 +4,10 @@ LABEL maintainer="ACE Team - https://github.com/acemod"
 LABEL org.opencontainers.image.source=https://github.com/acemod/docker-reforger
 
 # SteamCMD requires root. Do not add a USER directive.
-# checkov:skip=CKV_DOCKER_3: SteamCMD and the Arma server require root; see .hadolint.yaml DL3002
+# checkov:skip=CKV_DOCKER_3: SteamCMD and the Arma server require root
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update \
-    && \
-    apt-get install -y --no-install-recommends --no-install-suggests \
+    && apt-get install -y --no-install-recommends --no-install-suggests \
         python3 \
         lib32stdc++6 \
         lib32gcc-s1 \
@@ -18,18 +17,10 @@ RUN apt-get update \
         net-tools \
         libssl3 \
         wamerican \
-    && \
-    apt-get remove --purge -y \
-    && \
-    apt-get clean autoclean \
-    && \
-    apt-get autoremove -y \
-    && \
-    rm -rf /var/lib/apt/lists/* \
-    && \
-    mkdir -p /steamcmd \
-    && \
-    wget -qO- 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz' | tar zxf - -C /steamcmd
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /steamcmd \
+    && wget -qO- 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz' | tar zxf - -C /steamcmd
 
 ENV STEAM_USER=""
 ENV STEAM_PASSWORD=""
@@ -120,8 +111,9 @@ EXPOSE $RCON_PORT/udp
 
 STOPSIGNAL SIGINT
 
-COPY healthcheck.py launch.py launch_config.py /
-COPY docker_default.json /
+COPY src/ /app/
+# PERSISTENCE_JSON_FILE_PATH is documented as pointing here, so this path is
+# part of the public interface and does not move with the rest of the app.
 COPY persistence_default.json /
 
 # start-period gives the first SteamCMD install and server boot time to finish
@@ -129,6 +121,6 @@ COPY persistence_default.json /
 # timeout has headroom for healthcheck.py probing several UDP endpoints (IPv6 +
 # IPv4) at 5s each when the server is down, so Docker does not kill the probe.
 HEALTHCHECK --interval=60s --timeout=30s --start-period=15m --retries=3 \
-    CMD python3 /healthcheck.py
+    CMD python3 /app/healthcheck.py
 
-CMD ["python3","/launch.py"]
+CMD ["python3","/app/launch.py"]

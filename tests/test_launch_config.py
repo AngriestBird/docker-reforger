@@ -393,3 +393,65 @@ def test_game_properties_integers(base_config):
     assert game_properties["serverMaxViewDistance"] == 3000
     assert game_properties["serverMinGrassDistance"] == 100
     assert game_properties["networkViewDistance"] == 2000
+
+
+RCON_ENV = {
+    "RCON_ADDRESS": "0.0.0.0",
+    "RCON_PORT": "19999",
+    "RCON_PASSWORD": "secret",
+}
+
+# Every env var build_config maps onto the config, with a value that differs
+# from the default. Anything dropped from the env maps stops having an effect,
+# which is what this catches.
+ENV_OVERRIDES = [
+    {"SERVER_BIND_ADDRESS": "127.0.0.1"},
+    {"SERVER_BIND_PORT": "3001"},
+    {"SERVER_PUBLIC_ADDRESS": "1.2.3.4"},
+    {"SERVER_PUBLIC_PORT": "3002"},
+    {"SERVER_A2S_ADDRESS": "127.0.0.1", "SERVER_A2S_PORT": "17777"},
+    RCON_ENV,
+    RCON_ENV | {"RCON_PERMISSION": "monitor"},
+    RCON_ENV | {"RCON_MAX_CLIENTS": "10"},
+    RCON_ENV | {"RCON_BLACKLIST": "kick"},
+    RCON_ENV | {"RCON_WHITELIST": "help"},
+    {"GAME_NAME": "My Server"},
+    {"GAME_PASSWORD": "mypassword"},
+    {"GAME_PASSWORD_ADMIN": "myadminpassword"},
+    {"GAME_ADMINS": "admin1,admin2"},
+    {"GAME_SCENARIO_ID": "{FOO}Missions/01.conf"},
+    {"GAME_MAX_PLAYERS": "32"},
+    {"GAME_VISIBLE": "false"},
+    {"GAME_SUPPORTED_PLATFORMS": "PLATFORM_PC"},
+    {"GAME_CROSS_PLATFORM": "true"},
+    {"GAME_MODS_REQUIRED_BY_DEFAULT": "true"},
+    {"GAME_MODS_IDS_LIST": MOD_A},
+    {"GAME_PROPS_BATTLEYE": "false"},
+    {"GAME_PROPS_DISABLE_THIRD_PERSON": "true"},
+    {"GAME_PROPS_FAST_VALIDATION": "false"},
+    {"GAME_PROPS_SERVER_MAX_VIEW_DISTANCE": "3000"},
+    {"GAME_PROPS_SERVER_MIN_GRASS_DISTANCE": "100"},
+    {"GAME_PROPS_NETWORK_VIEW_DISTANCE": "2000"},
+    {"GAME_PROPS_VON_DISABLE_UI": "true"},
+    {"GAME_PROPS_VON_DISABLE_DIRECT_SPEECH_UI": "true"},
+    {"GAME_PROPS_VON_CAN_TRANSMIT_CROSS_FACTION": "true"},
+    {"PERSISTENCE_AUTO_SAVE_INTERVAL": "300"},
+    {"PERSISTENCE_SAVE_RETENTION": "5"},
+    {"PERSISTENCE_LOAD_SESSION_SAVE": "true"},
+    {"PERSISTENCE_KEEP_SESSION_SAVE": "true"},
+    {"PERSISTENCE_HIVE_ID": "123"},
+    {"OPERATING_LOBBY_PLAYER_SYNCHRONISE": "true"},
+    {"OPERATING_DISABLE_CRASH_REPORTER": "true"},
+    {"OPERATING_DISABLE_NAVMESH_STREAMING": "all"},
+    {"OPERATING_DISABLE_SERVER_SHUTDOWN": "true"},
+    {"OPERATING_DISABLE_AI": "true"},
+    {"OPERATING_PLAYER_SAVE_TIME": "120"},
+    {"OPERATING_AI_LIMIT": "50"},
+    {"OPERATING_SLOT_RESERVATION_TIMEOUT": "60"},
+    {"OPERATING_JOIN_QUEUE_MAX_SIZE": "10"},
+]
+
+
+@pytest.mark.parametrize("env", ENV_OVERRIDES, ids=lambda env: ",".join(sorted(env)))
+def test_env_override_reaches_the_config(base_config, env):
+    assert build_config(env, base_config) != build_config({}, base_config)

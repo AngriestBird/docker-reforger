@@ -1,4 +1,0 @@
----
-ignored:
-  - DL3002 # SteamCMD requires root
-  - DL3008 # Intentionally not pinning apt package versions

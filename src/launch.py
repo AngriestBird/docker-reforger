@@ -13,7 +13,7 @@ from launch_config import bool_str, build_config, env_defined, prune_mods
 signal.signal(signal.SIGTERM, signal.default_int_handler)
 
 CONFIG_GENERATED = "/reforger/Configs/docker_generated.json"
-DEFAULT_CONFIG = "/docker_default.json"
+DEFAULT_CONFIG = "/app/docker_default.json"
 EXPERIMENTAL_APPID = "1890870"
 STEAMCMD = "/steamcmd/steamcmd.sh"
 SENTINEL_WINDOWS_FIX = Path("/reforger/.windows_fix_done")
