@@ -1,7 +1,7 @@
 FROM debian:bookworm-slim
 
 LABEL maintainer="ACE Team - https://github.com/acemod"
-LABEL org.opencontainers.image.source=https://github.com/acemod/docker-reforger
+LABEL org.opencontainers.image.source=https://github.com/acemod/arma-reforger
 
 # SteamCMD requires root. Do not add a USER directive.
 # checkov:skip=CKV_DOCKER_3: SteamCMD and the Arma server require root
