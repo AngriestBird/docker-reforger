@@ -2,7 +2,7 @@
 
 An Arma Reforger dedicated server. Updates to the latest version every time it is restarted.
 
-**NOTE**: Runs as **root** by design — SteamCMD requires root to install game files.
+**NOTE**: Runs as **root** by design. SteamCMD requires root to install game files.
 
 ## Usage
 
@@ -24,15 +24,15 @@ If an admin password is not provided, one will be generated and printed to the c
 
 ### Docker-compose
 
-Simply check-out / copy [the provided docker-compose.yml](docker-compose.yml) and adjust to your personal needs.
+Copy [the provided docker-compose.yml](docker-compose.yml) and adjust it to your needs.
 
 ## Parameters
 
 ### Configs
 
-By default the container regenerates `Configs/docker_generated.json` from `/docker_default.json` on every startup. The environment variables are the source of truth for that generated config, including enabling and disabling optional sections like A2S, RCON, persistence, operating, and mission header overrides.
+By default the container regenerates `Configs/docker_generated.json` from a bundled template on every startup. The environment variables decide what ends up in it, including which optional sections get written at all: A2S, RCON, persistence, operating, and mission header overrides.
 
-If you want to hand-edit a config file and keep those changes, set `ARMA_CONFIG` to a different file in the `Configs` volume. That file is used as-is and is not modified by the container.
+If you want to hand-edit a config file and keep those changes, point `ARMA_CONFIG` at your own file in the `Configs` volume, `.json` and all. That file is used as-is and is not modified by the container.
 
 ### Steam / Installation
 
@@ -40,7 +40,7 @@ If you want to hand-edit a config file and keep those changes, set `ARMA_CONFIG`
 |---|---|---|
 | `STEAM_USER` | *(empty)* | Steam username (anonymous login if empty) |
 | `STEAM_PASSWORD` | *(empty)* | Steam password |
-| `STEAM_APPID` | `1874900` | Steam app ID. Use `1890870` for the experimental server. The container performs the required one-time Windows SteamCMD pass automatically before switching back to Linux installs |
+| `STEAM_APPID` | `1874900` | Steam app ID. Use `1890870` for the experimental server. That one needs a one-time Windows SteamCMD pass first, which the container handles for you |
 | `STEAM_BRANCH` | `public` | Steam branch to install from |
 | `STEAM_BRANCH_PASSWORD` | *(empty)* | Password for the Steam branch |
 | `SKIP_INSTALL` | `false` | Skip the SteamCMD install/update step |
@@ -49,7 +49,7 @@ If you want to hand-edit a config file and keep those changes, set `ARMA_CONFIG`
 
 | Variable | Default | Description |
 |---|---|---|
-| `ARMA_CONFIG` | `docker_generated` | Config filename (without `.json`). Set to use a custom config from the `Configs` volume without ENV overrides |
+| `ARMA_CONFIG` | `docker_generated` | Config to load. The default regenerates it from the environment variables. Any other value is a filename in the `Configs` volume, extension included, and is used as-is |
 | `ARMA_PROFILE` | `/home/profile` | Server profile directory |
 | `ARMA_BINARY` | `./ArmaReforgerServer` | Path to the server binary |
 | `ARMA_PARAMS` | *(empty)* | Additional command-line parameters (e.g. `-loadSessionSave` to resume a previous session) |
@@ -86,7 +86,7 @@ RCON is activated by defining the `RCON_PASSWORD` variable.
 |---|---|---|
 | `GAME_NAME` | `Arma Reforger Docker Server` | Server name shown in the server browser |
 | `GAME_PASSWORD` | *(empty)* | Password required to join the server |
-| `GAME_PASSWORD_ADMIN` | *(auto-generated)* | Admin password. If not set, a random passphrase is generated and printed to the console |
+| `GAME_PASSWORD_ADMIN` | *(empty)* | Admin password. If left empty, a random passphrase is generated and printed to the console |
 | `GAME_ADMINS` | *(empty)* | Comma-delimited list of admin identityIds and/or steamIds |
 | `GAME_SCENARIO_ID` | `{ECC61978EDCC2B5A}Missions/23_Campaign.conf` | Scenario to load |
 | `GAME_MAX_PLAYERS` | `32` | Maximum number of players |
@@ -94,6 +94,7 @@ RCON is activated by defining the `RCON_PASSWORD` variable.
 | `GAME_SUPPORTED_PLATFORMS` | `PLATFORM_PC,PLATFORM_XBL,PLATFORM_PSN` | Comma-separated list of supported platforms |
 | `GAME_CROSS_PLATFORM` | *(empty)* | Accept all platforms if `true`. Recommended over `GAME_SUPPORTED_PLATFORMS` |
 | `GAME_MODS_REQUIRED_BY_DEFAULT` | *(empty)* | Default `required` value for mods that do not explicitly set one. Server default is `true` |
+| `GAME_MODS_AUTO_PRUNE` | `false` | Remove downloaded mods that are not referenced by the active server config or one of its installed dependencies |
 | `GAME_MISSION_HEADER_JSON_FILE_PATH` | *(empty)* | Path to a JSON file containing mission header overrides (see [Mission Header](#mission-header)) |
 | `GAME_MODS_IDS_LIST` | *(empty)* | Comma-separated mod IDs with optional version (e.g. `5965770215E93269=1.0.6,5965550F24A0C152`) |
 | `GAME_MODS_JSON_FILE_PATH` | *(empty)* | Path to a JSON file containing an array of mod objects (see [Mods](#mods)) |
@@ -114,7 +115,7 @@ RCON is activated by defining the `RCON_PASSWORD` variable.
 
 ### Persistence
 
-Persistence is **disabled by default** — the system works automatically for most use cases. Set any `PERSISTENCE_*` variable to enable the persistence config section.
+Persistence is **disabled by default**. The game's own defaults are fine for most servers. Set any `PERSISTENCE_*` variable to enable the persistence config section.
 
 **NOTE**: `-loadSessionSave` must be enabled in order to load session saves.
 
@@ -172,7 +173,7 @@ Example `persistence.json`:
 
 ### Operating
 
-Operating settings are **disabled by default** — set any `OPERATING_*` variable to enable the operating config section.
+Operating settings are **disabled by default**. Set any `OPERATING_*` variable to enable the operating config section.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -209,7 +210,15 @@ Example `mission_header.json`:
 
 ### Mods
 
-Workshop mods can be defined in two ways. You can use both or either of those.
+Workshop mods can be defined in two ways, `GAME_MODS_IDS_LIST` and
+`GAME_MODS_JSON_FILE_PATH`. Use either one, or both.
+
+Set `GAME_MODS_AUTO_PRUNE=true` to clear unused mods out of
+`ARMA_WORKSHOP_DIR` before the server starts. It keeps the mods in the active
+config plus their installed dependencies and removes the rest. Unrelated or
+invalid directories are left alone. If a configured mod or one of its
+dependencies has bad metadata, startup stops and nothing is pruned. An
+interrupted prune finishes on the next start.
 
 #### GAME_MODS_IDS_LIST
 
@@ -221,7 +230,7 @@ A comma separated list of IDs, with an optional version. Entries generated from 
 
 #### GAME_MODS_JSON_FILE_PATH
 
-Path to a JSON file that contains array of mod objects.
+Path to a JSON file that contains an array of mod objects.
 
 ```sh
 -v ${PWD}/mods_file.json:/mods_file.json
@@ -238,25 +247,41 @@ Path to a JSON file that contains array of mod objects.
 ]
 ```
 
-### Development
+## Documentation
 
-#### Pre-commit
+The full Server Configuration can be found [here](https://community.bistudio.com/wiki/Arma_Reforger:Server_Config).  
+The Dockerfile may not include every option that is currently available and may lag behind upstream for additional feature support.
 
-This project uses [pre-commit](https://pre-commit.com/) to lint the Dockerfile with [hadolint](https://github.com/hadolint/hadolint).
+## Development
+
+App code lives in `src/` and is copied to `/app` in the image. Tests live in
+`tests/`. `persistence_default.json` stays at the repository root because it
+ships to `/persistence_default.json`. Users point `PERSISTENCE_JSON_FILE_PATH`
+at that file.
+
+Pinned dev dependencies and tool config both live in `pyproject.toml`, as
+[PEP 735](https://peps.python.org/pep-0735/) groups. CI runs the same commands
+against the same versions. Needs pip 25.1 or newer for `--group`.
+
+```sh
+pip install --group dev
+```
+
+Then run the checks.
+
+```sh
+black --check --diff .
+isort --check-only --diff .
+pylint --recursive=y .
+pytest -q
+```
+
+[pre-commit](https://pre-commit.com/) runs all of that plus
+[hadolint](https://github.com/hadolint/hadolint) on the Dockerfile.
 
 ```sh
 pip install pre-commit
 pre-commit install
 ```
 
-#### Tests
-
-```sh
-pip install pytest
-pytest -q
-```
-
-### Documentation
-
-The full Server Configuration can be found [here](https://community.bistudio.com/wiki/Arma_Reforger:Server_Config).  
-The Dockerfile may not include every option that is currently available and may lag behind upstream for additional feature support.
+`scripts/build.sh` builds the image locally and tags it `arma-reforger-test`.

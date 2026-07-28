@@ -2,5 +2,10 @@
 .github
 *.md
 .pre-commit-config.yaml
-.hadolint.yaml
+docker-compose.yml
+pyproject.toml
+scripts/
+tests/
+**/__pycache__/
+**/.pytest_cache/
 reforger/

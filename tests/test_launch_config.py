@@ -1,12 +1,11 @@
 import json
 
 import pytest
-from launch_config import bool_str, build_config, env_defined, load_json_file
 
+from launch_config import bool_str, build_config, env_defined
 
-@pytest.fixture
-def base_config():
-    return load_json_file("docker_default.json")
+MOD_A = "1111111111111111"
+MOD_B = "2222222222222222"
 
 
 def write_json(tmp_path, name, content):
@@ -168,16 +167,16 @@ def test_mods_required_by_default(base_config):
 
 
 def test_mods_ids_list(base_config):
-    env = {"GAME_MODS_IDS_LIST": "12345=1.0.0,67890"}
+    env = {"GAME_MODS_IDS_LIST": f"{MOD_A}=1.0.0,{MOD_B}"}
     config = build_config(env, base_config)
     assert len(config["game"]["mods"]) == 2
-    assert config["game"]["mods"][0] == {"modId": "12345", "version": "1.0.0"}
-    assert config["game"]["mods"][1] == {"modId": "67890"}
+    assert config["game"]["mods"][0] == {"modId": MOD_A, "version": "1.0.0"}
+    assert config["game"]["mods"][1] == {"modId": MOD_B}
 
 
 def test_mods_ids_list_with_required(base_config):
     env = {
-        "GAME_MODS_IDS_LIST": "12345=1.0.0",
+        "GAME_MODS_IDS_LIST": f"{MOD_A}=1.0.0",
         "GAME_MODS_REQUIRED_BY_DEFAULT": "true",
     }
     config = build_config(env, base_config)
@@ -185,13 +184,19 @@ def test_mods_ids_list_with_required(base_config):
 
 
 def test_mods_ids_list_invalid_chars(base_config):
-    env = {"GAME_MODS_IDS_LIST": "12345=1.0.0;bad"}
+    env = {"GAME_MODS_IDS_LIST": f"{MOD_A}=1.0.0;bad"}
     with pytest.raises(ValueError, match="Illegal characters"):
         build_config(env, base_config)
 
 
+def test_mods_ids_list_invalid_id(base_config):
+    env = {"GAME_MODS_IDS_LIST": "12345"}
+    with pytest.raises(ValueError, match="Invalid mod ID"):
+        build_config(env, base_config)
+
+
 def test_mods_ids_list_invalid_version(base_config):
-    env = {"GAME_MODS_IDS_LIST": "12345=BADVERSION"}
+    env = {"GAME_MODS_IDS_LIST": f"{MOD_A}=BADVERSION"}
     with pytest.raises(ValueError, match="version does not match"):
         build_config(env, base_config)
 
@@ -201,8 +206,8 @@ def test_mods_json_file(base_config, tmp_path):
         tmp_path,
         "mods.json",
         [
-            {"modId": "12345", "name": "Test Mod", "version": "1.0.0"},
-            {"modId": "67890", "required": False},
+            {"modId": MOD_A, "name": "Test Mod", "version": "1.0.0"},
+            {"modId": MOD_B, "required": False},
         ],
     )
     env = {"GAME_MODS_JSON_FILE_PATH": str(mods_file)}
@@ -212,20 +217,34 @@ def test_mods_json_file(base_config, tmp_path):
     assert not config["game"]["mods"][1]["required"]
 
 
-def test_mods_json_missing_modId(base_config, tmp_path):
+def test_mods_json_missing_modid(base_config, tmp_path):
     mods_file = write_json(tmp_path, "mods.json", [{"name": "Bad Mod"}])
     env = {"GAME_MODS_JSON_FILE_PATH": str(mods_file)}
     with pytest.raises(ValueError, match="does not contain modId"):
         build_config(env, base_config)
 
 
+def test_mods_json_invalid_mod_id(base_config, tmp_path):
+    mods_file = write_json(tmp_path, "mods.json", [{"modId": "12345"}])
+    env = {"GAME_MODS_JSON_FILE_PATH": str(mods_file)}
+    with pytest.raises(ValueError, match="Invalid mod ID"):
+        build_config(env, base_config)
+
+
+def test_mods_json_must_be_array(base_config, tmp_path):
+    mods_file = write_json(tmp_path, "mods.json", {"modId": MOD_A})
+    env = {"GAME_MODS_JSON_FILE_PATH": str(mods_file)}
+    with pytest.raises(ValueError, match="must contain an array"):
+        build_config(env, base_config)
+
+
 def test_mods_deduplication(base_config, tmp_path):
     """Mod IDs from GAME_MODS_IDS_LIST should skip duplicates from JSON."""
     mods_file = write_json(
-        tmp_path, "mods.json", [{"modId": "12345", "name": "From JSON"}]
+        tmp_path, "mods.json", [{"modId": MOD_A, "name": "From JSON"}]
     )
     env = {
-        "GAME_MODS_IDS_LIST": "12345",
+        "GAME_MODS_IDS_LIST": MOD_A,
         "GAME_MODS_JSON_FILE_PATH": str(mods_file),
     }
     config = build_config(env, base_config)
@@ -241,12 +260,12 @@ def test_persistence_config(base_config):
         "PERSISTENCE_HIVE_ID": "123",
     }
     config = build_config(env, base_config)
-    p = config["game"]["gameProperties"]["persistence"]
-    assert p["autoSaveInterval"] == 300
-    assert p["saveRetention"] == 5
-    assert p["loadSessionSave"]
-    assert not p["keepSessionSave"]
-    assert p["hiveId"] == 123
+    persistence = config["game"]["gameProperties"]["persistence"]
+    assert persistence["autoSaveInterval"] == 300
+    assert persistence["saveRetention"] == 5
+    assert persistence["loadSessionSave"]
+    assert not persistence["keepSessionSave"]
+    assert persistence["hiveId"] == 123
 
 
 def test_persistence_json_merge(base_config, tmp_path):
@@ -261,10 +280,10 @@ def test_persistence_json_merge(base_config, tmp_path):
     )
     env = {"PERSISTENCE_JSON_FILE_PATH": str(persistence_file)}
     config = build_config(env, base_config)
-    p = config["game"]["gameProperties"]["persistence"]
-    assert p["databases"] == {"foo": "bar"}
-    assert p["storages"] == {"baz": "qux"}
-    assert "ignored" not in p
+    persistence = config["game"]["gameProperties"]["persistence"]
+    assert persistence["databases"] == {"foo": "bar"}
+    assert persistence["storages"] == {"baz": "qux"}
+    assert "ignored" not in persistence
 
 
 def test_persistence_not_set_when_empty(base_config):
@@ -292,15 +311,15 @@ def test_operating_config(base_config):
         "OPERATING_JOIN_QUEUE_MAX_SIZE": "10",
     }
     config = build_config(env, base_config)
-    o = config["operating"]
-    assert o["lobbyPlayerSynchronise"]
-    assert not o["disableCrashReporter"]
-    assert o["disableServerShutdown"]
-    assert not o["disableAI"]
-    assert o["playerSaveTime"] == 120
-    assert o["aiLimit"] == 50
-    assert o["slotReservationTimeout"] == 60
-    assert o["joinQueue"]["maxSize"] == 10
+    operating = config["operating"]
+    assert operating["lobbyPlayerSynchronise"]
+    assert not operating["disableCrashReporter"]
+    assert operating["disableServerShutdown"]
+    assert not operating["disableAI"]
+    assert operating["playerSaveTime"] == 120
+    assert operating["aiLimit"] == 50
+    assert operating["slotReservationTimeout"] == 60
+    assert operating["joinQueue"]["maxSize"] == 10
 
 
 def test_operating_navmesh_all(base_config):
@@ -354,13 +373,13 @@ def test_game_properties_booleans(base_config):
         "GAME_PROPS_VON_CAN_TRANSMIT_CROSS_FACTION": "true",
     }
     config = build_config(env, base_config)
-    gp = config["game"]["gameProperties"]
-    assert not gp["battlEye"]
-    assert gp["disableThirdPerson"]
-    assert not gp["fastValidation"]
-    assert gp["VONDisableUI"]
-    assert gp["VONDisableDirectSpeechUI"]
-    assert gp["VONCanTransmitCrossFaction"]
+    game_properties = config["game"]["gameProperties"]
+    assert not game_properties["battlEye"]
+    assert game_properties["disableThirdPerson"]
+    assert not game_properties["fastValidation"]
+    assert game_properties["VONDisableUI"]
+    assert game_properties["VONDisableDirectSpeechUI"]
+    assert game_properties["VONCanTransmitCrossFaction"]
 
 
 def test_game_properties_integers(base_config):
@@ -370,7 +389,69 @@ def test_game_properties_integers(base_config):
         "GAME_PROPS_NETWORK_VIEW_DISTANCE": "2000",
     }
     config = build_config(env, base_config)
-    gp = config["game"]["gameProperties"]
-    assert gp["serverMaxViewDistance"] == 3000
-    assert gp["serverMinGrassDistance"] == 100
-    assert gp["networkViewDistance"] == 2000
+    game_properties = config["game"]["gameProperties"]
+    assert game_properties["serverMaxViewDistance"] == 3000
+    assert game_properties["serverMinGrassDistance"] == 100
+    assert game_properties["networkViewDistance"] == 2000
+
+
+RCON_ENV = {
+    "RCON_ADDRESS": "0.0.0.0",
+    "RCON_PORT": "19999",
+    "RCON_PASSWORD": "secret",
+}
+
+# Every env var build_config maps onto the config, with a value that differs
+# from the default. Anything dropped from the env maps stops having an effect,
+# which is what this catches.
+ENV_OVERRIDES = [
+    {"SERVER_BIND_ADDRESS": "127.0.0.1"},
+    {"SERVER_BIND_PORT": "3001"},
+    {"SERVER_PUBLIC_ADDRESS": "1.2.3.4"},
+    {"SERVER_PUBLIC_PORT": "3002"},
+    {"SERVER_A2S_ADDRESS": "127.0.0.1", "SERVER_A2S_PORT": "17777"},
+    RCON_ENV,
+    RCON_ENV | {"RCON_PERMISSION": "monitor"},
+    RCON_ENV | {"RCON_MAX_CLIENTS": "10"},
+    RCON_ENV | {"RCON_BLACKLIST": "kick"},
+    RCON_ENV | {"RCON_WHITELIST": "help"},
+    {"GAME_NAME": "My Server"},
+    {"GAME_PASSWORD": "mypassword"},
+    {"GAME_PASSWORD_ADMIN": "myadminpassword"},
+    {"GAME_ADMINS": "admin1,admin2"},
+    {"GAME_SCENARIO_ID": "{FOO}Missions/01.conf"},
+    {"GAME_MAX_PLAYERS": "32"},
+    {"GAME_VISIBLE": "false"},
+    {"GAME_SUPPORTED_PLATFORMS": "PLATFORM_PC"},
+    {"GAME_CROSS_PLATFORM": "true"},
+    {"GAME_MODS_REQUIRED_BY_DEFAULT": "true"},
+    {"GAME_MODS_IDS_LIST": MOD_A},
+    {"GAME_PROPS_BATTLEYE": "false"},
+    {"GAME_PROPS_DISABLE_THIRD_PERSON": "true"},
+    {"GAME_PROPS_FAST_VALIDATION": "false"},
+    {"GAME_PROPS_SERVER_MAX_VIEW_DISTANCE": "3000"},
+    {"GAME_PROPS_SERVER_MIN_GRASS_DISTANCE": "100"},
+    {"GAME_PROPS_NETWORK_VIEW_DISTANCE": "2000"},
+    {"GAME_PROPS_VON_DISABLE_UI": "true"},
+    {"GAME_PROPS_VON_DISABLE_DIRECT_SPEECH_UI": "true"},
+    {"GAME_PROPS_VON_CAN_TRANSMIT_CROSS_FACTION": "true"},
+    {"PERSISTENCE_AUTO_SAVE_INTERVAL": "300"},
+    {"PERSISTENCE_SAVE_RETENTION": "5"},
+    {"PERSISTENCE_LOAD_SESSION_SAVE": "true"},
+    {"PERSISTENCE_KEEP_SESSION_SAVE": "true"},
+    {"PERSISTENCE_HIVE_ID": "123"},
+    {"OPERATING_LOBBY_PLAYER_SYNCHRONISE": "true"},
+    {"OPERATING_DISABLE_CRASH_REPORTER": "true"},
+    {"OPERATING_DISABLE_NAVMESH_STREAMING": "all"},
+    {"OPERATING_DISABLE_SERVER_SHUTDOWN": "true"},
+    {"OPERATING_DISABLE_AI": "true"},
+    {"OPERATING_PLAYER_SAVE_TIME": "120"},
+    {"OPERATING_AI_LIMIT": "50"},
+    {"OPERATING_SLOT_RESERVATION_TIMEOUT": "60"},
+    {"OPERATING_JOIN_QUEUE_MAX_SIZE": "10"},
+]
+
+
+@pytest.mark.parametrize("env", ENV_OVERRIDES, ids=lambda env: ",".join(sorted(env)))
+def test_env_override_reaches_the_config(base_config, env):
+    assert build_config(env, base_config) != build_config({}, base_config)

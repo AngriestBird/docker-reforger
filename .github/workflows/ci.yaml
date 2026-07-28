@@ -5,6 +5,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -12,6 +15,8 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 0
+      # Python is linted in the test job instead, where the dev dependencies are
+      # installed and imports actually resolve.
       - name: Lint
         uses: github/super-linter@45fc0d88288beee4701c62761281edfee85655d7
         env:
@@ -19,6 +24,11 @@ jobs:
           VALIDATE_ALL_CODEBASE: false
           DEFAULT_BRANCH: main
           YAML_ERROR_ON_WARNING: true
+          VALIDATE_PYTHON_BLACK: false
+          VALIDATE_PYTHON_FLAKE8: false
+          VALIDATE_PYTHON_ISORT: false
+          VALIDATE_PYTHON_MYPY: false
+          VALIDATE_PYTHON_PYLINT: false
 
   test:
     runs-on: ubuntu-latest
@@ -27,8 +37,14 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
-          python-version: "3.12"
+          python-version: "3.14"
       - name: Install dependencies
-        run: pip install pytest
+        run: pip install --group dev
+      - name: Check formatting
+        run: black --check --diff .
+      - name: Check import order
+        run: isort --check-only --diff .
+      - name: Lint Python
+        run: pylint --recursive=y .
       - name: Run tests
         run: pytest -v

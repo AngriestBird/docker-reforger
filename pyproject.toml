@@ -1,0 +1,31 @@
+# This repo ships a container, not a package, so there is no [project] table.
+# PEP 735 dependency groups still give pinned, tool-agnostic dev dependencies.
+[dependency-groups]
+dev = [
+    "black==26.5.1",
+    "isort==8.0.1",
+    "pylint==4.0.6",
+    "pytest==9.1.1",
+    {include-group = "smoke"},
+]
+# The publish workflow queries the running server with this. dev pulls it in so
+# pylint can resolve the a2s import in .github/scripts.
+smoke = [
+    "python-a2s==1.4.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.isort]
+profile = "black"
+known_first_party = ["launch_config"]
+
+[tool.pylint.main]
+# Tests and scripts live outside a package, so tell pylint where imports resolve
+# from instead of letting it fail on them.
+source-roots = ["src", "."]
+# The project style is comment-light and docstring-free, so the missing-docstring
+# checks would only ever report style this repo deliberately does not follow.
+disable = ["missing-module-docstring", "missing-function-docstring"]
