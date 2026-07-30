@@ -1,3 +1,5 @@
 ---
 ignored:
-  - DL3008 # Pinned apt versions
+  # Debian ships security updates in place, so pinning apt versions here would
+  # break the build every time the base image moves.
+  - DL3008

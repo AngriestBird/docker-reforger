@@ -1,12 +1,14 @@
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
+ARG SOURCE_URL=https://github.com/acemod/docker-reforger
 LABEL maintainer="ACE Team - https://github.com/acemod"
-LABEL org.opencontainers.image.source=https://github.com/acemod/docker-reforger
+LABEL org.opencontainers.image.source="$SOURCE_URL"
 
+# SteamCMD requires root. Do not add a USER directive.
+# checkov:skip=CKV_DOCKER_3: SteamCMD and the Arma server require root
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update \
-    && \
-    apt-get install -y --no-install-recommends --no-install-suggests \
+    && apt-get install -y --no-install-recommends --no-install-suggests \
         python3 \
         lib32stdc++6 \
         lib32gcc-s1 \
@@ -14,20 +16,12 @@ RUN apt-get update \
         ca-certificates \
         libcurl4 \
         net-tools \
-        libssl1.1 \
+        libssl3 \
         wamerican \
-    && \
-    apt-get remove --purge -y \
-    && \
-    apt-get clean autoclean \
-    && \
-    apt-get autoremove -y \
-    && \
-    rm -rf /var/lib/apt/lists/* \
-    && \
-    mkdir -p /steamcmd \
-    && \
-    wget -qO- 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz' | tar zxf - -C /steamcmd
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /steamcmd \
+    && wget -qO- 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz' | tar zxf - -C /steamcmd
 
 ENV STEAM_USER=""
 ENV STEAM_PASSWORD=""
@@ -53,6 +47,9 @@ ENV RCON_ADDRESS="0.0.0.0"
 ENV RCON_PORT=19999
 ENV RCON_PASSWORD=""
 ENV RCON_PERMISSION="admin"
+ENV RCON_MAX_CLIENTS=""
+ENV RCON_BLACKLIST=""
+ENV RCON_WHITELIST=""
 
 ENV GAME_NAME="Arma Reforger Docker Server"
 ENV GAME_PASSWORD=""
@@ -63,6 +60,10 @@ ENV GAME_SCENARIO_ID="{ECC61978EDCC2B5A}Missions/23_Campaign.conf"
 ENV GAME_MAX_PLAYERS=32
 ENV GAME_VISIBLE=true
 ENV GAME_SUPPORTED_PLATFORMS=PLATFORM_PC,PLATFORM_XBL,PLATFORM_PSN
+ENV GAME_CROSS_PLATFORM=""
+ENV GAME_MODS_REQUIRED_BY_DEFAULT=""
+ENV GAME_MODS_AUTO_PRUNE=false
+ENV GAME_MISSION_HEADER_JSON_FILE_PATH=""
 ENV GAME_PROPS_BATTLEYE=true
 ENV GAME_PROPS_DISABLE_THIRD_PERSON=false
 ENV GAME_PROPS_FAST_VALIDATION=true
@@ -77,8 +78,22 @@ ENV GAME_PROPS_VON_CAN_TRANSMIT_CROSS_FACTION=false
 
 # Persistence (disabled by default - set any to enable)
 ENV PERSISTENCE_AUTO_SAVE_INTERVAL=""
+ENV PERSISTENCE_SAVE_RETENTION=""
+ENV PERSISTENCE_LOAD_SESSION_SAVE=""
+ENV PERSISTENCE_KEEP_SESSION_SAVE=""
 ENV PERSISTENCE_HIVE_ID=""
 ENV PERSISTENCE_JSON_FILE_PATH=""
+
+# Operating (disabled by default - set any to enable)
+ENV OPERATING_LOBBY_PLAYER_SYNCHRONISE=""
+ENV OPERATING_DISABLE_CRASH_REPORTER=""
+ENV OPERATING_DISABLE_NAVMESH_STREAMING=""
+ENV OPERATING_DISABLE_SERVER_SHUTDOWN=""
+ENV OPERATING_DISABLE_AI=""
+ENV OPERATING_PLAYER_SAVE_TIME=""
+ENV OPERATING_AI_LIMIT=""
+ENV OPERATING_SLOT_RESERVATION_TIMEOUT=""
+ENV OPERATING_JOIN_QUEUE_MAX_SIZE=""
 
 ENV SKIP_INSTALL=false
 
@@ -89,13 +104,24 @@ VOLUME /home/profile
 VOLUME /reforger/Configs
 VOLUME /reforger/workshop
 
-EXPOSE 2001/udp
-EXPOSE 17777/udp
+# These expand to the default ports above at build time. They are documentation
+# only - overriding the ports at runtime still works, it just won't change these.
+EXPOSE $SERVER_BIND_PORT/udp
+EXPOSE $SERVER_A2S_PORT/udp
+EXPOSE $RCON_PORT/udp
 
 STOPSIGNAL SIGINT
 
-COPY *.py /
-COPY docker_default.json /
+COPY src/ /app/
+# PERSISTENCE_JSON_FILE_PATH is documented as pointing here, so this path is
+# part of the public interface and does not move with the rest of the app.
 COPY persistence_default.json /
 
-CMD ["python3","/launch.py"]
+# start-period gives the first SteamCMD install and server boot time to finish
+# before failing checks count against retries. Bump it if your install is slower.
+# timeout has headroom for healthcheck.py probing several UDP endpoints (IPv6 +
+# IPv4) at 5s each when the server is down, so Docker does not kill the probe.
+HEALTHCHECK --interval=60s --timeout=30s --start-period=15m --retries=3 \
+    CMD python3 /app/healthcheck.py
+
+CMD ["python3","/app/launch.py"]

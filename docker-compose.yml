@@ -1,7 +1,8 @@
 ---
 services:
   arma-reforger:
-    image: ghcr.io/acemod/arma-reforger:latest
+    # Override REFORGER_IMAGE in a .env to run a fork or a local build.
+    image: ${REFORGER_IMAGE:-ghcr.io/acemod/arma-reforger:latest}
     platform: linux/amd64
     container_name: arma-reforger
     ports:

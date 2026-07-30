@@ -1,0 +1,34 @@
+---
+repos:
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        args: [--config, .github/linters/.hadolint.yaml]
+
+  # These run the versions pinned in the pyproject.toml dev group, so pre-commit
+  # and CI cannot drift apart.
+  - repo: local
+    hooks:
+      - id: black
+        name: black
+        entry: black --check --diff
+        language: system
+        types: [python]
+      - id: isort
+        name: isort
+        entry: isort --check-only --diff
+        language: system
+        types: [python]
+      - id: pylint
+        name: pylint
+        entry: pylint --recursive=y .
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: pytest
+        name: pytest
+        entry: pytest -q
+        language: system
+        types: [python]
+        pass_filenames: false

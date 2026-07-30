@@ -1,0 +1,12 @@
+.git
+.github
+*.md
+.pre-commit-config.yaml
+docker-compose.yml
+.env
+pyproject.toml
+scripts/
+tests/
+**/__pycache__/
+**/.pytest_cache/
+reforger/
