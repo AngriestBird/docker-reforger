@@ -64,6 +64,52 @@ def _run_container(image, dirs, *, steamcmd_dir=None, env=None):
     return _run(command, check=False, timeout=120)
 
 
+def _make_smoke_directories(tmp_path):
+    config_dir = tmp_path / "configs"
+    profile_dir = tmp_path / "profile"
+    workshop_dir = tmp_path / "workshop"
+    steamcmd_dir = tmp_path / "steamcmd"
+    steamcmd_calls = _write_steamcmd_stub(steamcmd_dir)
+
+    for path in (config_dir, profile_dir, workshop_dir):
+        path.mkdir()
+
+    return config_dir, profile_dir, workshop_dir, steamcmd_dir, steamcmd_calls
+
+
+def _run_smoke_container(tmp_path, *, skip_install):
+    config_dir, profile_dir, workshop_dir, steamcmd_dir, steamcmd_calls = (
+        _make_smoke_directories(tmp_path)
+    )
+    run = _run_container(
+        _image_tag(),
+        (config_dir, profile_dir, workshop_dir),
+        steamcmd_dir=steamcmd_dir,
+        env={
+            "SKIP_INSTALL": "true" if skip_install else "false",
+            "ARMA_BINARY": "/bin/true",
+            "GAME_NAME": "SmokeTest",
+            "GAME_MAX_PLAYERS": "16",
+        },
+    )
+
+    if run.returncode != 0:
+        pytest.fail(f"Smoke container failed: {run.stderr or run.stdout}")
+
+    return config_dir, steamcmd_calls, run
+
+
+def _assert_generated_config(config_dir):
+    generated_config = config_dir / "docker_generated.json"
+    assert generated_config.exists()
+
+    with generated_config.open(encoding="utf-8") as config_file:
+        config = json.load(config_file)
+
+    assert config["game"]["name"] == "SmokeTest"
+    assert config["game"]["maxPlayers"] == 16
+
+
 @pytest.fixture(scope="session")
 def build_smoke_image():
     if shutil.which("docker") is None:
@@ -92,69 +138,24 @@ def build_smoke_image():
 @pytest.mark.smoke
 @pytest.mark.usefixtures("build_smoke_image")
 def test_dockerfile_smoke_launch_and_config_generation(tmp_path):
-    config_dir = tmp_path / "configs"
-    profile_dir = tmp_path / "profile"
-    workshop_dir = tmp_path / "workshop"
-    steamcmd_dir = tmp_path / "steamcmd"
-    steamcmd_calls = _write_steamcmd_stub(steamcmd_dir)
-
-    for path in (config_dir, profile_dir, workshop_dir):
-        path.mkdir()
-
-    run = _run_container(
-        _image_tag(),
-        (config_dir, profile_dir, workshop_dir),
-        steamcmd_dir=steamcmd_dir,
-        env={
-            "SKIP_INSTALL": "true",
-            "ARMA_BINARY": "/bin/true",
-            "GAME_NAME": "SmokeTest",
-            "GAME_MAX_PLAYERS": "16",
-        },
+    config_dir, steamcmd_calls, run = _run_smoke_container(
+        tmp_path,
+        skip_install=True,
     )
-
-    if run.returncode != 0:
-        pytest.fail(f"Smoke container failed: {run.stderr or run.stdout}")
 
     assert "/bin/true -config /reforger/Configs/docker_generated.json" in run.stdout
 
-    generated_config = config_dir / "docker_generated.json"
-    assert generated_config.exists()
-
-    with generated_config.open(encoding="utf-8") as config_file:
-        config = json.load(config_file)
-
-    assert config["game"]["name"] == "SmokeTest"
-    assert config["game"]["maxPlayers"] == 16
+    _assert_generated_config(config_dir)
     assert not steamcmd_calls.exists()
 
 
 @pytest.mark.smoke
 @pytest.mark.usefixtures("build_smoke_image")
 def test_dockerfile_steamcmd_update_runs_when_not_skipped(tmp_path):
-    config_dir = tmp_path / "configs"
-    profile_dir = tmp_path / "profile"
-    workshop_dir = tmp_path / "workshop"
-    steamcmd_dir = tmp_path / "steamcmd"
-    steamcmd_calls = _write_steamcmd_stub(steamcmd_dir)
-
-    for path in (config_dir, profile_dir, workshop_dir):
-        path.mkdir()
-
-    run = _run_container(
-        _image_tag(),
-        (config_dir, profile_dir, workshop_dir),
-        steamcmd_dir=steamcmd_dir,
-        env={
-            "SKIP_INSTALL": "false",
-            "ARMA_BINARY": "/bin/true",
-            "GAME_NAME": "SmokeTest",
-            "GAME_MAX_PLAYERS": "16",
-        },
+    config_dir, steamcmd_calls, _ = _run_smoke_container(
+        tmp_path,
+        skip_install=False,
     )
-
-    if run.returncode != 0:
-        pytest.fail(f"Smoke container failed: {run.stderr or run.stdout}")
 
     steamcmd_invocations = steamcmd_calls.read_text(encoding="utf-8").splitlines()
     assert len(steamcmd_invocations) == 2
@@ -165,14 +166,7 @@ def test_dockerfile_steamcmd_update_runs_when_not_skipped(tmp_path):
         "-beta public validate +quit"
     )
 
-    generated_config = config_dir / "docker_generated.json"
-    assert generated_config.exists()
-
-    with generated_config.open(encoding="utf-8") as config_file:
-        config = json.load(config_file)
-
-    assert config["game"]["name"] == "SmokeTest"
-    assert config["game"]["maxPlayers"] == 16
+    _assert_generated_config(config_dir)
 
 
 @pytest.mark.smoke
