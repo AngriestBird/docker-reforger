@@ -14,7 +14,7 @@ smoke = ["python-a2s==1.4.2"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = [".", "src"]
 markers = ["smoke: Docker-based startup integration checks"]
 
 [tool.isort]

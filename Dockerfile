@@ -92,6 +92,10 @@ ENV OPERATING_JOIN_QUEUE_MAX_SIZE=""
 
 ENV SKIP_INSTALL=false
 
+# Keep Python stdout unbuffered so prune and SteamCMD output reaches `docker logs`
+# in real time instead of waiting for the long-running server to exit.
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /reforger
 
 VOLUME /steamcmd
